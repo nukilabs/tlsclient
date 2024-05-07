@@ -9,7 +9,7 @@ import (
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zlib"
 	"github.com/klauspost/compress/zstd"
-	http "github.com/robin-samuel/fhttp"
+	http "github.com/sparkaio/fhttp"
 )
 
 const (

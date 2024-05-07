@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/robin-samuel/tlsclient"
-	"github.com/robin-samuel/tlsclient/profiles"
+	"github.com/sparkaio/tlsclient"
+	"github.com/sparkaio/tlsclient/profiles"
 )
 
 func TestOkhttp4Android21(t *testing.T) {

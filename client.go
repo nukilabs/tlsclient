@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	http "github.com/robin-samuel/fhttp"
-	"github.com/robin-samuel/fhttp/cookiejar"
-	"github.com/robin-samuel/tlsclient/profiles"
+	http "github.com/sparkaio/fhttp"
+	"github.com/sparkaio/fhttp/cookiejar"
+	"github.com/sparkaio/tlsclient/profiles"
 	"golang.org/x/net/proxy"
 )
 

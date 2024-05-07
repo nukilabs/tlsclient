@@ -2,7 +2,7 @@ package profiles
 
 import (
 	tls "github.com/refraction-networking/utls"
-	"github.com/robin-samuel/fhttp/http2"
+	"github.com/sparkaio/fhttp/http2"
 )
 
 func Okhttp4Android(sdk int) ClientProfile {

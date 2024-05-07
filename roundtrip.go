@@ -8,9 +8,9 @@ import (
 	"time"
 
 	tls "github.com/refraction-networking/utls"
-	http "github.com/robin-samuel/fhttp"
-	"github.com/robin-samuel/fhttp/http2"
-	"github.com/robin-samuel/tlsclient/profiles"
+	http "github.com/sparkaio/fhttp"
+	"github.com/sparkaio/fhttp/http2"
+	"github.com/sparkaio/tlsclient/profiles"
 	"golang.org/x/net/proxy"
 )
 

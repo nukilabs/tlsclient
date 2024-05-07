@@ -1,4 +1,4 @@
-module github.com/robin-samuel/tlsclient
+module github.com/sparkaio/tlsclient
 
 go 1.22.0
 
@@ -6,7 +6,7 @@ require (
 	github.com/andybalholm/brotli v1.0.6
 	github.com/klauspost/compress v1.17.4
 	github.com/refraction-networking/utls v1.6.3
-	github.com/robin-samuel/fhttp v0.0.0-20240410225402-38d0d04c5078
+	github.com/sparkaio/fhttp v1.0.0
 	golang.org/x/net v0.23.0
 )
 
