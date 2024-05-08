@@ -22,6 +22,8 @@ github.com/refraction-networking/utls v1.6.3 h1:MFOfRN35sSx6K5AZNIoESsBuBxS2LCgR
 github.com/refraction-networking/utls v1.6.3/go.mod h1:yil9+7qSl+gBwJqztoQseO6Pr3h62pQoY1lXiNR/FPs=
 github.com/sparkaio/fhttp v1.0.0 h1:Cf5MJ6zXkSrhYMUU/sFYX+wF9CGo5Kh0mPl4SQecXbQ=
 github.com/sparkaio/fhttp v1.0.0/go.mod h1:hWV8RR0pqOeb6pk29ECabTQxL4+6Ds5FftwebG7EZpI=
+github.com/sparkaio/fhttp v1.0.1 h1:2djy+klBRoDtXq0oENvmBXAdUeYCf747BI8x9/dzgTw=
+github.com/sparkaio/fhttp v1.0.1/go.mod h1:hWV8RR0pqOeb6pk29ECabTQxL4+6Ds5FftwebG7EZpI=
 golang.org/x/crypto v0.21.0 h1:X31++rzVUdKhX5sWmSOFZxx8UW/ldWx55cbf08iNAMA=
 golang.org/x/crypto v0.21.0/go.mod h1:0BP7YvVV9gBbVKyeTG0Gyn+gZm94bibOW5BjDEYAOMs=
 golang.org/x/net v0.23.0 h1:7EYJ93RZ9vYSZAIb2x3lnuvqO5zneoD6IvWjuhfxjTs=
