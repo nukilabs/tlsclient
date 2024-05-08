@@ -72,7 +72,9 @@ func (rt *RoundTripper) getTransport(scheme, addr string) (http.RoundTripper, er
 	case "http":
 		rt.transports[addr] = rt.buildHttp1Transport()
 	case "https":
-		rt.dialTLSContext(context.Background(), "tcp", addr)
+		if _, err := rt.dialTLSContext(context.Background(), "tcp", addr); err != nil {
+			return nil, err
+		}
 	default:
 		return nil, fmt.Errorf("unsupported scheme: %s", scheme)
 	}
