@@ -23,7 +23,7 @@ type Client struct {
 	AutoDecompress bool
 }
 
-type HookFunc func(*http.Response) (*http.Response, error)
+type HookFunc func(*Client, *http.Response) (*http.Response, error)
 
 type Option func(*Client)
 
@@ -160,7 +160,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		DecompressBody(res)
 	}
 	for _, hook := range c.hooks {
-		res, err = hook(res)
+		res, err = hook(c, res)
 		if err != nil {
 			return nil, err
 		}
