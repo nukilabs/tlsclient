@@ -36,9 +36,11 @@ func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer,
 		clientSessionCache = tls.NewLRUClientSessionCache(32)
 	}
 	return &RoundTripper{
-		profile:            profile,
-		dialer:             dialer,
-		pinner:             pinner,
+		profile: profile,
+		dialer:  dialer,
+		pinner:  pinner,
+		tracker: tracker,
+
 		clientSessionCache: clientSessionCache,
 
 		transports:  make(map[string]http.RoundTripper),
