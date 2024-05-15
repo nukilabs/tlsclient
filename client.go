@@ -8,6 +8,7 @@ import (
 
 	http "github.com/sparkaio/fhttp"
 	"github.com/sparkaio/fhttp/cookiejar"
+	"github.com/sparkaio/tlsclient/bandwidth"
 	"github.com/sparkaio/tlsclient/profiles"
 	"golang.org/x/net/proxy"
 )
@@ -16,6 +17,7 @@ type Client struct {
 	http.Client
 	profile  profiles.ClientProfile
 	pinner   *Pinner
+	tracker  bandwidth.Tracker
 	proxyURL *url.URL
 	hooks    []HookFunc
 	redirect func(req *http.Request, via []*http.Request) error
@@ -45,6 +47,12 @@ func WithNoCookieJar() Option {
 	}
 }
 
+func WithTracker(tracker bandwidth.Tracker) Option {
+	return func(c *Client) {
+		c.tracker = tracker
+	}
+}
+
 func WithTimeout(timeout time.Duration) Option {
 	return func(c *Client) {
 		c.Timeout = timeout
@@ -62,6 +70,7 @@ func New(profile profiles.ClientProfile, options ...Option) *Client {
 		profile: profile,
 
 		AutoDecompress: true,
+		tracker:        bandwidth.NewNoopTracker(),
 	}
 	for _, option := range options {
 		option(client)
@@ -69,7 +78,7 @@ func New(profile profiles.ClientProfile, options ...Option) *Client {
 	if client.pinner == nil {
 		client.pinner = NewPinner(false)
 	}
-	client.Transport = NewRoundTripper(profile, proxy.Direct, client.pinner)
+	client.Transport = NewRoundTripper(profile, proxy.Direct, client.pinner, client.tracker)
 	return client
 }
 
@@ -99,13 +108,13 @@ func (c *Client) applyProxy() error {
 		}
 		dialer = proxyDialer
 	}
-	c.Transport = NewRoundTripper(c.profile, dialer, c.pinner)
+	c.Transport = NewRoundTripper(c.profile, dialer, c.pinner, c.tracker)
 	return nil
 }
 
 func (c *Client) RemoveProxy() {
 	c.proxyURL = nil
-	c.Transport = NewRoundTripper(c.profile, proxy.Direct, c.pinner)
+	c.Transport = NewRoundTripper(c.profile, proxy.Direct, c.pinner, c.tracker)
 }
 
 func (c *Client) AddHooks(hooks ...HookFunc) {

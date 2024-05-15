@@ -10,15 +10,18 @@ import (
 	tls "github.com/refraction-networking/utls"
 	http "github.com/sparkaio/fhttp"
 	"github.com/sparkaio/fhttp/http2"
+	"github.com/sparkaio/tlsclient/bandwidth"
 	"github.com/sparkaio/tlsclient/profiles"
 	"golang.org/x/net/proxy"
 )
 
 type RoundTripper struct {
 	sync.Mutex
-	profile            profiles.ClientProfile
-	dialer             proxy.ContextDialer
-	pinner             *Pinner
+	profile profiles.ClientProfile
+	dialer  proxy.ContextDialer
+	pinner  *Pinner
+	tracker bandwidth.Tracker
+
 	clientSessionCache tls.ClientSessionCache
 	insecureSkipVerify bool
 
@@ -27,7 +30,7 @@ type RoundTripper struct {
 	connections   map[string]net.Conn
 }
 
-func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer, pinner *Pinner) *RoundTripper {
+func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer, pinner *Pinner, tracker bandwidth.Tracker) *RoundTripper {
 	var clientSessionCache tls.ClientSessionCache
 	if supportsSessionResumption(profile.ClientHelloSpec()) {
 		clientSessionCache = tls.NewLRUClientSessionCache(32)
@@ -129,6 +132,8 @@ func (rt *RoundTripper) dialTLSContext(ctx context.Context, network, addr string
 	if err != nil {
 		return nil, err
 	}
+	rawConn = bandwidth.NewTrackedConn(rawConn, rt.tracker)
+
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err
