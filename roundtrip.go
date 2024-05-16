@@ -96,6 +96,7 @@ func (rt *RoundTripper) buildHttp1Transport() http.RoundTripper {
 			InsecureSkipVerify: rt.insecureSkipVerify,
 			OmitEmptyPsk:       true,
 		},
+		IdleConnTimeout: 90 * time.Second,
 	}
 }
 
