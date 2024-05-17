@@ -21,43 +21,12 @@ type Client struct {
 	proxyURL *url.URL
 	hooks    []HookFunc
 	redirect func(req *http.Request, via []*http.Request) error
+	opts     *TransportOptions
 
 	AutoDecompress bool
 }
 
 type HookFunc func(*Client, *http.Response) (*http.Response, error)
-
-type Option func(*Client)
-
-func WithAutoPinning() Option {
-	return func(c *Client) {
-		c.pinner = NewPinner(true)
-	}
-}
-
-func WithNoAutoDecompress() Option {
-	return func(c *Client) {
-		c.AutoDecompress = false
-	}
-}
-
-func WithNoCookieJar() Option {
-	return func(c *Client) {
-		c.Client.Jar = nil
-	}
-}
-
-func WithTracker(tracker bandwidth.Tracker) Option {
-	return func(c *Client) {
-		c.tracker = tracker
-	}
-}
-
-func WithTimeout(timeout time.Duration) Option {
-	return func(c *Client) {
-		c.Timeout = timeout
-	}
-}
 
 func New(profile profiles.ClientProfile, options ...Option) *Client {
 	jar, _ := cookiejar.New(nil)
@@ -78,7 +47,7 @@ func New(profile profiles.ClientProfile, options ...Option) *Client {
 	if client.pinner == nil {
 		client.pinner = NewPinner(false)
 	}
-	client.Transport = NewRoundTripper(profile, proxy.Direct, client.pinner, client.tracker)
+	client.Transport = NewRoundTripper(profile, proxy.Direct, client.pinner, client.tracker, client.opts)
 	return client
 }
 
@@ -108,13 +77,13 @@ func (c *Client) applyProxy() error {
 		}
 		dialer = proxyDialer
 	}
-	c.Transport = NewRoundTripper(c.profile, dialer, c.pinner, c.tracker)
+	c.Transport = NewRoundTripper(c.profile, dialer, c.pinner, c.tracker, c.opts)
 	return nil
 }
 
 func (c *Client) RemoveProxy() {
 	c.proxyURL = nil
-	c.Transport = NewRoundTripper(c.profile, proxy.Direct, c.pinner, c.tracker)
+	c.Transport = NewRoundTripper(c.profile, proxy.Direct, c.pinner, c.tracker, c.opts)
 }
 
 func (c *Client) AddHooks(hooks ...HookFunc) {

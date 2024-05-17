@@ -23,17 +23,29 @@ type RoundTripper struct {
 	tracker bandwidth.Tracker
 
 	clientSessionCache tls.ClientSessionCache
+	serverNameOverride string
 	insecureSkipVerify bool
+	disableKeepAlives  bool
+	idleConnTimeout    time.Duration
 
 	transportLock sync.Mutex
 	transports    map[string]http.RoundTripper
 	connections   map[string]net.Conn
 }
 
-func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer, pinner *Pinner, tracker bandwidth.Tracker) *RoundTripper {
+func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer, pinner *Pinner, tracker bandwidth.Tracker, opts *TransportOptions) *RoundTripper {
 	var clientSessionCache tls.ClientSessionCache
 	if supportsSessionResumption(profile.ClientHelloSpec()) {
 		clientSessionCache = tls.NewLRUClientSessionCache(32)
+	}
+	var insecureSkipVerify, disableKeepAlives bool
+	var idleConnTimeout time.Duration = 90 * time.Second
+	if opts != nil {
+		insecureSkipVerify = opts.InsecureSkipVerify
+		disableKeepAlives = opts.DisableKeepAlives
+		if opts.IdleConnTimeout != 0 {
+			idleConnTimeout = opts.IdleConnTimeout
+		}
 	}
 	return &RoundTripper{
 		profile: profile,
@@ -42,6 +54,10 @@ func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer,
 		tracker: tracker,
 
 		clientSessionCache: clientSessionCache,
+		serverNameOverride: opts.ServerNameOverride,
+		insecureSkipVerify: insecureSkipVerify,
+		disableKeepAlives:  disableKeepAlives,
+		idleConnTimeout:    idleConnTimeout,
 
 		transports:  make(map[string]http.RoundTripper),
 		connections: make(map[string]net.Conn),
@@ -96,7 +112,8 @@ func (rt *RoundTripper) buildHttp1Transport() http.RoundTripper {
 			InsecureSkipVerify: rt.insecureSkipVerify,
 			OmitEmptyPsk:       true,
 		},
-		IdleConnTimeout: 90 * time.Second,
+		DisableKeepAlives: rt.disableKeepAlives,
+		IdleConnTimeout:   rt.idleConnTimeout,
 	}
 }
 
@@ -114,7 +131,7 @@ func (rt *RoundTripper) buildHttp2Transport() http.RoundTripper {
 		Priorities:        rt.profile.Priorities,
 		HeaderPriority:    rt.profile.HeaderPriority,
 		PseudoHeaderOrder: rt.profile.PseudoHeaderOrder,
-		IdleConnTimeout:   90 * time.Second,
+		IdleConnTimeout:   rt.idleConnTimeout,
 	}
 }
 
