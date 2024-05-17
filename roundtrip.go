@@ -57,7 +57,7 @@ func (rt *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		addr = net.JoinHostPort(host, port)
 	}
 
-	transport, err := rt.getTransport(req.URL.Scheme, addr)
+	transport, err := rt.getTransport(req.Context(), req.URL.Scheme, addr)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func (rt *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return transport.RoundTrip(req)
 }
 
-func (rt *RoundTripper) getTransport(scheme, addr string) (http.RoundTripper, error) {
+func (rt *RoundTripper) getTransport(ctx context.Context, scheme, addr string) (http.RoundTripper, error) {
 	rt.transportLock.Lock()
 	defer rt.transportLock.Unlock()
 
@@ -77,7 +77,7 @@ func (rt *RoundTripper) getTransport(scheme, addr string) (http.RoundTripper, er
 	case "http":
 		rt.transports[addr] = rt.buildHttp1Transport()
 	case "https":
-		if _, err := rt.dialTLSContext(context.Background(), "tcp", addr); err != nil {
+		if _, err := rt.dialTLSContext(ctx, "tcp", addr); err != nil {
 			return nil, err
 		}
 	default:
