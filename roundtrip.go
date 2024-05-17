@@ -38,9 +38,11 @@ func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer,
 	if supportsSessionResumption(profile.ClientHelloSpec()) {
 		clientSessionCache = tls.NewLRUClientSessionCache(32)
 	}
+	var serverNameOverride string
 	var insecureSkipVerify, disableKeepAlives bool
 	var idleConnTimeout time.Duration = 90 * time.Second
 	if opts != nil {
+		serverNameOverride = opts.ServerNameOverride
 		insecureSkipVerify = opts.InsecureSkipVerify
 		disableKeepAlives = opts.DisableKeepAlives
 		if opts.IdleConnTimeout != 0 {
@@ -54,7 +56,7 @@ func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer,
 		tracker: tracker,
 
 		clientSessionCache: clientSessionCache,
-		serverNameOverride: opts.ServerNameOverride,
+		serverNameOverride: serverNameOverride,
 		insecureSkipVerify: insecureSkipVerify,
 		disableKeepAlives:  disableKeepAlives,
 		idleConnTimeout:    idleConnTimeout,
