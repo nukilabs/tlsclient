@@ -135,7 +135,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 	if c.AutoDecompress {
-		DecompressBody(res)
+		http.DecompressBody(res)
 	}
 	for _, hook := range c.hooks {
 		res, err = hook(c, res)
