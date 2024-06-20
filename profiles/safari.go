@@ -34,7 +34,7 @@ var Safari_17 = ClientProfile{
 			CompressionMethods: []byte{
 				0x00, // compressionNone
 			},
-			Extensions: tls.ShuffleChromeTLSExtensions([]tls.TLSExtension{
+			Extensions: []tls.TLSExtension{
 				&tls.UtlsGREASEExtension{},
 				&tls.SNIExtension{},
 				&tls.ExtendedMasterSecretExtension{},
@@ -84,7 +84,7 @@ var Safari_17 = ClientProfile{
 				}},
 				&tls.UtlsGREASEExtension{},
 				&tls.UtlsPaddingExtension{GetPaddingLen: tls.BoringPaddingStyle},
-			}),
+			},
 		}
 	},
 	Settings: []http2.Setting{
