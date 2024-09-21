@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -97,7 +96,7 @@ func (d *ConnectDialer) DialContext(ctx context.Context, network, addr string) (
 	case "http":
 		rawConn, err := d.Dialer.DialContext(ctx, network, d.ProxyURL.Host)
 		if err != nil {
-			return nil, err
+			return nil, NewErrProxy("Failed to dial proxy: " + err.Error())
 		}
 		return d.connectHttp1(req, rawConn)
 	case "https":
@@ -106,10 +105,10 @@ func (d *ConnectDialer) DialContext(ctx context.Context, network, addr string) (
 			NextProtos: []string{"h2", "http/1.1"},
 		})
 		if err != nil {
-			return nil, err
+			return nil, NewErrProxy("Failed to dial proxy: " + err.Error())
 		}
 		if err := rawConn.HandshakeContext(ctx); err != nil {
-			return nil, err
+			return nil, NewErrProxy("Failed to handshake with proxy: " + err.Error())
 		}
 
 		state := rawConn.ConnectionState()
@@ -137,10 +136,10 @@ func (d *ConnectDialer) DialContext(ctx context.Context, network, addr string) (
 
 			return proxyConn, nil
 		default:
-			return nil, errors.New("Unsupported negotiated protocol: " + state.NegotiatedProtocol)
+			return nil, NewErrProxy("Unsupported negotiated protocol: " + state.NegotiatedProtocol)
 		}
 	default:
-		return nil, errors.New("Unsupported proxy scheme: " + d.ProxyURL.Scheme)
+		return nil, NewErrProxy("Unsupported proxy scheme: " + d.ProxyURL.Scheme)
 	}
 }
 
@@ -153,23 +152,23 @@ func (d *ConnectDialer) connectHttp1(req *http.Request, rawConn net.Conn) (net.C
 	deadline := time.Now().Add(d.Timeout)
 	if err := rawConn.SetDeadline(deadline); err != nil {
 		rawConn.Close()
-		return nil, err
+		return nil, NewErrProxy("Failed to set deadline: " + err.Error())
 	}
 
 	if err := req.Write(rawConn); err != nil {
 		rawConn.Close()
-		return nil, err
+		return nil, NewErrProxy("Failed to write proxy request: " + err.Error())
 	}
 
 	res, err := http.ReadResponse(bufio.NewReader(rawConn), req)
 	if err != nil {
 		rawConn.Close()
-		return nil, err
+		return nil, NewErrProxy("Failed to read proxy response: " + err.Error())
 	}
 
 	if res.StatusCode != http.StatusOK {
 		rawConn.Close()
-		return nil, errors.New("Proxy responded with non 200 code: " + res.Status)
+		return nil, NewErrProxy("Proxy responded with non 200 code: " + res.Status)
 	}
 
 	// Reset the deadline
@@ -192,12 +191,12 @@ func (d *ConnectDialer) connectHttp2(req *http.Request, rawConn net.Conn, h2clie
 	res, err := h2clientConn.RoundTrip(req)
 	if err != nil {
 		rawConn.Close()
-		return nil, err
+		return nil, NewErrProxy("Failed to round trip: " + err.Error())
 	}
 
 	if res.StatusCode != http.StatusOK {
 		rawConn.Close()
-		return nil, errors.New("Proxy responded with non 200 code: " + res.Status)
+		return nil, NewErrProxy("Proxy responded with non 200 code: " + res.Status)
 	}
 
 	return newHttp2Conn(rawConn, pw, res.Body), nil
