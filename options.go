@@ -11,6 +11,8 @@ type TransportOptions struct {
 	InsecureSkipVerify bool
 	DisableKeepAlives  bool
 	IdleConnTimeout    time.Duration
+	DisableIPV4        bool
+	DisableIPV6        bool
 }
 
 type Option func(*Client)
