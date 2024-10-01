@@ -7,14 +7,14 @@ import (
 
 var ErrCertificatePinningFailed = errors.New("tlsclient: certificate pinning failed")
 
-type ErrProxy struct {
+type ProxyError struct {
 	Message string
 }
 
-func (e *ErrProxy) Error() string {
+func (e ProxyError) Error() string {
 	return fmt.Sprintf("Proxy error: %s", e.Message)
 }
 
-func NewErrProxy(message string) *ErrProxy {
-	return &ErrProxy{Message: message}
+func proxyError(message string) ProxyError {
+	return ProxyError{Message: message}
 }
