@@ -2,6 +2,7 @@ package tlsclient
 
 import (
 	"io"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -15,13 +16,14 @@ import (
 
 type Client struct {
 	http.Client
-	profile  profiles.ClientProfile
-	pinner   *Pinner
-	tracker  bandwidth.Tracker
-	proxyURL *url.URL
-	hooks    []HookFunc
-	redirect func(req *http.Request, via []*http.Request) error
-	opts     *TransportOptions
+	profile   profiles.ClientProfile
+	pinner    *Pinner
+	tracker   bandwidth.Tracker
+	proxyURL  *url.URL
+	localAddr *net.TCPAddr
+	hooks     []HookFunc
+	redirect  func(req *http.Request, via []*http.Request) error
+	opts      *TransportOptions
 
 	AutoDecompress bool
 }
@@ -84,6 +86,28 @@ func (c *Client) applyProxy() error {
 func (c *Client) RemoveProxy() {
 	c.proxyURL = nil
 	c.Transport = NewRoundTripper(c.profile, proxy.Direct, c.pinner, c.tracker, c.opts)
+}
+
+func (c *Client) SetLocalAddr(addr *net.TCPAddr) error {
+	currentAddr := c.localAddr
+	c.localAddr = addr
+	if err := c.applyLocalAddr(); err != nil {
+		c.localAddr = currentAddr
+		if err := c.applyLocalAddr(); err != nil {
+			c.localAddr = nil
+			return c.applyLocalAddr()
+		}
+	}
+	return nil
+}
+
+func (c *Client) applyLocalAddr() error {
+	var dialer proxy.ContextDialer = proxy.Direct
+	if c.localAddr != nil {
+		dialer = NewDirectDialer(c.localAddr, c.Timeout)
+	}
+	c.Transport = NewRoundTripper(c.profile, dialer, c.pinner, c.tracker, c.opts)
+	return nil
 }
 
 func (c *Client) AddHooks(hooks ...HookFunc) {

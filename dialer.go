@@ -18,6 +18,27 @@ import (
 	"golang.org/x/net/proxy"
 )
 
+type DirectDialer struct {
+	Dialer net.Dialer
+}
+
+func NewDirectDialer(addr *net.TCPAddr, timeout time.Duration) *DirectDialer {
+	return &DirectDialer{
+		Dialer: net.Dialer{
+			Timeout:   timeout,
+			LocalAddr: addr,
+		},
+	}
+}
+
+func (d *DirectDialer) Dial(network, addr string) (net.Conn, error) {
+	return d.Dialer.Dial(network, addr)
+}
+
+func (d *DirectDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	return d.Dialer.DialContext(ctx, network, addr)
+}
+
 type ConnectDialer struct {
 	ProxyURL      *url.URL
 	Dialer        net.Dialer
