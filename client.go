@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	http "github.com/sparkaio/fhttp"
-	"github.com/sparkaio/fhttp/cookiejar"
-	"github.com/sparkaio/tlsclient/bandwidth"
-	"github.com/sparkaio/tlsclient/profiles"
+	http "github.com/nukilabs/fhttp"
+	"github.com/nukilabs/fhttp/cookiejar"
+	"github.com/nukilabs/tlsclient/bandwidth"
+	"github.com/nukilabs/tlsclient/profiles"
 	"golang.org/x/net/proxy"
 )
 

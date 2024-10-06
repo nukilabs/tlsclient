@@ -1,8 +1,8 @@
 package tlsclient
 
 import (
+	http "github.com/nukilabs/fhttp"
 	tls "github.com/refraction-networking/utls"
-	http "github.com/sparkaio/fhttp"
 )
 
 func supportsSessionResumption(spec *tls.ClientHelloSpec) bool {

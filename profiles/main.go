@@ -1,8 +1,8 @@
 package profiles
 
 import (
+	"github.com/nukilabs/fhttp/http2"
 	tls "github.com/refraction-networking/utls"
-	"github.com/sparkaio/fhttp/http2"
 )
 
 type ClientProfile struct {

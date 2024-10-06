@@ -3,7 +3,7 @@ package tlsclient
 import (
 	"time"
 
-	"github.com/sparkaio/tlsclient/bandwidth"
+	"github.com/nukilabs/tlsclient/bandwidth"
 )
 
 type TransportOptions struct {

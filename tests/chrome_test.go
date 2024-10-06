@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/sparkaio/tlsclient"
-	"github.com/sparkaio/tlsclient/profiles"
+	"github.com/nukilabs/tlsclient"
+	"github.com/nukilabs/tlsclient/profiles"
 )
 
 func TestChrome(t *testing.T) {
