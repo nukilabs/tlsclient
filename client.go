@@ -155,6 +155,10 @@ func (c *Client) SetFollowRedirects(follow bool) {
 	}
 }
 
+func (c *Client) ResetInHook() {
+	c.inHook.Store(false)
+}
+
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	res, err := c.Client.Do(req)
 	if err != nil {
