@@ -3,7 +3,7 @@ module github.com/nukilabs/tlsclient
 go 1.23.0
 
 require (
-	github.com/nukilabs/fhttp v1.2.0
+	github.com/nukilabs/fhttp v1.2.1
 	github.com/refraction-networking/utls v1.6.7
 	golang.org/x/net v0.30.0
 )
