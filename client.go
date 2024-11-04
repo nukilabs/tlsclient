@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	http "github.com/nukilabs/fhttp"
@@ -22,6 +23,7 @@ type Client struct {
 	proxyURL  *url.URL
 	localAddr *net.TCPAddr
 	hooks     []HookFunc
+	inHook    atomic.Bool
 	redirect  func(req *http.Request, via []*http.Request) error
 	opts      *TransportOptions
 
@@ -162,9 +164,12 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		http.DecompressBody(res)
 	}
 	for _, hook := range c.hooks {
-		res, err = hook(c, res)
-		if err != nil {
-			return nil, err
+		if c.inHook.CompareAndSwap(false, true) {
+			res, err = hook(c, res)
+			if err != nil {
+				return nil, err
+			}
+			c.inHook.Store(false)
 		}
 	}
 	return res, nil
