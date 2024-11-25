@@ -2,7 +2,7 @@ package profiles
 
 import (
 	"github.com/nukilabs/fhttp/http2"
-	tls "github.com/refraction-networking/utls"
+	tls "github.com/nukilabs/utls"
 )
 
 func Okhttp4Android(sdk int) ClientProfile {

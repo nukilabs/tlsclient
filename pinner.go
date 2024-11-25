@@ -7,7 +7,7 @@ import (
 	"net"
 	"sync"
 
-	tls "github.com/refraction-networking/utls"
+	tls "github.com/nukilabs/utls"
 )
 
 type Pinner struct {

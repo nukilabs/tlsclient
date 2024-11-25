@@ -11,7 +11,7 @@ import (
 	"github.com/nukilabs/fhttp/http2"
 	"github.com/nukilabs/tlsclient/bandwidth"
 	"github.com/nukilabs/tlsclient/profiles"
-	tls "github.com/refraction-networking/utls"
+	tls "github.com/nukilabs/utls"
 	"golang.org/x/net/proxy"
 )
 
