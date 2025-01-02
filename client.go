@@ -170,10 +170,10 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	for _, hook := range c.hooks {
 		if c.inHook.CompareAndSwap(false, true) {
 			res, err = hook(c, res)
+			c.inHook.Store(false)
 			if err != nil {
 				return nil, err
 			}
-			c.inHook.Store(false)
 		}
 	}
 	return res, nil
