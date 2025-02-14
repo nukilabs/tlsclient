@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	http "github.com/nukilabs/fhttp"
-	"github.com/nukilabs/fhttp/cookiejar"
+	http "github.com/nukilabs/http"
+	"github.com/nukilabs/http/cookiejar"
 	"github.com/nukilabs/tlsclient/bandwidth"
 	"github.com/nukilabs/tlsclient/profiles"
 	"golang.org/x/net/proxy"
@@ -165,7 +165,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 	if c.AutoDecompress {
-		http.DecompressBody(res)
+		DecompressBody(res)
 	}
 	for _, hook := range c.hooks {
 		if c.inHook.CompareAndSwap(false, true) {

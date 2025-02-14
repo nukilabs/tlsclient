@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slices"
 	"sync"
 	"time"
 
-	http "github.com/nukilabs/fhttp"
-	"github.com/nukilabs/fhttp/http2"
+	"github.com/nukilabs/http"
+	"github.com/nukilabs/http/http2"
 	"github.com/nukilabs/tlsclient/bandwidth"
 	"github.com/nukilabs/tlsclient/profiles"
 	tls "github.com/nukilabs/utls"
@@ -29,6 +30,11 @@ type RoundTripper struct {
 	idleConnTimeout    time.Duration
 	disableIPV4        bool
 	disableIPV6        bool
+
+	maxUploadBufferPerConnection int32
+	maxReadFrameSize             uint32
+	maxHeaderListSize            uint32
+	maxHeaderTableSize           uint32
 
 	transportLock sync.Mutex
 	transports    map[string]http.RoundTripper
@@ -54,6 +60,22 @@ func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer,
 		disableIPV4 = opts.DisableIPV4
 		disableIPV6 = opts.DisableIPV6
 	}
+	var maxHeaderTableSize, maxReadFrameSize, maxHeaderListSize uint32
+	if idx := slices.IndexFunc(profile.Settings, func(s http2.Setting) bool {
+		return s.ID == http2.SettingHeaderTableSize
+	}); idx != -1 {
+		maxHeaderListSize = profile.Settings[idx].Val
+	}
+	if idx := slices.IndexFunc(profile.Settings, func(s http2.Setting) bool {
+		return s.ID == http2.SettingMaxFrameSize
+	}); idx != -1 {
+		maxReadFrameSize = profile.Settings[idx].Val
+	}
+	if idx := slices.IndexFunc(profile.Settings, func(s http2.Setting) bool {
+		return s.ID == http2.SettingMaxHeaderListSize
+	}); idx != -1 {
+		maxHeaderTableSize = profile.Settings[idx].Val
+	}
 	return &RoundTripper{
 		profile: profile,
 		dialer:  dialer,
@@ -67,6 +89,11 @@ func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer,
 		idleConnTimeout:    idleConnTimeout,
 		disableIPV4:        disableIPV4,
 		disableIPV6:        disableIPV6,
+
+		maxUploadBufferPerConnection: int32(profile.ConnectionFlow),
+		maxReadFrameSize:             maxReadFrameSize,
+		maxHeaderListSize:            maxHeaderListSize,
+		maxHeaderTableSize:           maxHeaderTableSize,
 
 		transports:  make(map[string]http.RoundTripper),
 		connections: make(map[string]net.Conn),
@@ -135,12 +162,15 @@ func (rt *RoundTripper) buildHttp2Transport() http.RoundTripper {
 			InsecureSkipVerify: rt.insecureSkipVerify,
 			OmitEmptyPsk:       true,
 		},
-		ConnectionFlow:    rt.profile.ConnectionFlow,
-		Settings:          rt.profile.Settings,
-		Priorities:        rt.profile.Priorities,
-		HeaderPriority:    rt.profile.HeaderPriority,
-		PseudoHeaderOrder: rt.profile.PseudoHeaderOrder,
-		IdleConnTimeout:   rt.idleConnTimeout,
+		MaxUploadBufferPerConnection: rt.maxUploadBufferPerConnection,
+		Settings:                     rt.profile.Settings,
+		Priorities:                   rt.profile.Priorities,
+		HeaderPriority:               rt.profile.HeaderPriority,
+		PseudoHeaderOrder:            rt.profile.PseudoHeaderOrder,
+		MaxReadFrameSize:             rt.maxReadFrameSize,
+		MaxHeaderListSize:            rt.maxHeaderListSize,
+		MaxDecoderHeaderTableSize:    rt.maxHeaderTableSize,
+		IdleConnTimeout:              rt.idleConnTimeout,
 	}
 }
 

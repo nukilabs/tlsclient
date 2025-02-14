@@ -1,7 +1,7 @@
 package profiles
 
 import (
-	"github.com/nukilabs/fhttp/http2"
+	"github.com/nukilabs/http/http2"
 	tls "github.com/nukilabs/utls"
 )
 
@@ -10,6 +10,6 @@ type ClientProfile struct {
 	Settings          []http2.Setting
 	ConnectionFlow    uint32
 	Priorities        []http2.Priority
-	HeaderPriority    *http2.PriorityParam
+	HeaderPriority    http2.PriorityParam
 	PseudoHeaderOrder []string
 }

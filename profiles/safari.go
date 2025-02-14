@@ -1,7 +1,7 @@
 package profiles
 
 import (
-	"github.com/nukilabs/fhttp/http2"
+	"github.com/nukilabs/http/http2"
 	tls "github.com/nukilabs/utls"
 )
 
@@ -93,7 +93,7 @@ var Safari_17 = ClientProfile{
 		{ID: http2.SettingMaxConcurrentStreams, Val: 100},
 	},
 	ConnectionFlow: 10485760,
-	HeaderPriority: &http2.PriorityParam{
+	HeaderPriority: http2.PriorityParam{
 		StreamDep: 0,
 		Exclusive: false,
 		Weight:    255,

@@ -1,7 +1,7 @@
 package profiles
 
 import (
-	"github.com/nukilabs/fhttp/http2"
+	"github.com/nukilabs/http/http2"
 	tls "github.com/nukilabs/utls"
 )
 
