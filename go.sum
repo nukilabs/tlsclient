@@ -6,6 +6,8 @@ github.com/klauspost/compress v1.17.11 h1:In6xLpyWOi1+C7tXUUWv2ot1QvBjxevKAaI6IX
 github.com/klauspost/compress v1.17.11/go.mod h1:pMDklpSncoRMuLFrf1W9Ss9KT+0rH90U12bZKk7uwG0=
 github.com/nukilabs/http v1.0.3 h1:YLoL1CI7Eom0cwP7EbQ181iiyp0S+58fnYLQNWnwoJY=
 github.com/nukilabs/http v1.0.3/go.mod h1:d6yQw2GJ2cWHq/29GyQTonnoYYDUYoONZLGqkZcRWXU=
+github.com/nukilabs/http v1.0.4 h1:9l15rPSciloaRyv3SBaE/ipEXUkPlwzwaPZhpTtFn7w=
+github.com/nukilabs/http v1.0.4/go.mod h1:d6yQw2GJ2cWHq/29GyQTonnoYYDUYoONZLGqkZcRWXU=
 github.com/nukilabs/utls v1.0.2 h1:rAFLaKxoseAAD3Jvc1s2b3KwuCg7fj2WVilHJMetJ4I=
 github.com/nukilabs/utls v1.0.2/go.mod h1:6bfAehNgIhe5Zh0QS+69MAgGUgo/owL8Sw/kJ/CM6n4=
 github.com/xyproto/randomstring v1.0.5 h1:YtlWPoRdgMu3NZtP45drfy1GKoojuR7hmRcnhZqKjWU=

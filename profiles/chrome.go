@@ -89,6 +89,11 @@ var Chrome_120 = ClientProfile{
 		{ID: http2.SettingMaxHeaderListSize, Val: 262144},
 	},
 	ConnectionFlow: 15663105,
+	HeaderPriority: http2.PriorityParam{
+		StreamDep: 0,
+		Exclusive: true,
+		Weight:    255,
+	},
 	PseudoHeaderOrder: []string{
 		":method",
 		":authority",
@@ -183,6 +188,11 @@ var Chrome_124 = ClientProfile{
 		{ID: http2.SettingMaxHeaderListSize, Val: 262144},
 	},
 	ConnectionFlow: 15663105,
+	HeaderPriority: http2.PriorityParam{
+		StreamDep: 0,
+		Exclusive: true,
+		Weight:    255,
+	},
 	PseudoHeaderOrder: []string{
 		":method",
 		":authority",
@@ -275,6 +285,11 @@ var Chrome131 = ClientProfile{
 		{ID: http2.SettingMaxHeaderListSize, Val: 262144},
 	},
 	ConnectionFlow: 15663105,
+	HeaderPriority: http2.PriorityParam{
+		StreamDep: 0,
+		Exclusive: true,
+		Weight:    255,
+	},
 	PseudoHeaderOrder: []string{
 		":method",
 		":authority",
@@ -367,6 +382,11 @@ var Chrome133 = ClientProfile{
 		{ID: http2.SettingMaxHeaderListSize, Val: 262144},
 	},
 	ConnectionFlow: 15663105,
+	HeaderPriority: http2.PriorityParam{
+		StreamDep: 0,
+		Exclusive: true,
+		Weight:    255,
+	},
 	PseudoHeaderOrder: []string{
 		":method",
 		":authority",
