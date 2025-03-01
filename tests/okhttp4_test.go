@@ -273,3 +273,22 @@ func TestOkhttp4Android34(t *testing.T) {
 		t.Errorf("Expected akamai hash 605a1154008045d7e3cb3c6fb062c0ce, got %s", data.AkamaiHash)
 	}
 }
+
+func TestOkhttp4Android35(t *testing.T) {
+	c := tlsclient.New(profiles.Okhttp4Android(34))
+	res, err := c.Get("https://tls.peet.ws/api/clean")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var data PeetsApiCleanData
+	if err := json.NewDecoder(res.Body).Decode(&data); err != nil {
+		t.Fatal(err)
+	}
+	if data.PeetprintHash != "f5a2547a1c4e1c66ba5ba13314a7c111" {
+		t.Errorf("Expected peetprint hash f5a2547a1c4e1c66ba5ba13314a7c111, got %s", data.PeetprintHash)
+	}
+	if data.AkamaiHash != "605a1154008045d7e3cb3c6fb062c0ce" {
+		t.Errorf("Expected akamai hash 605a1154008045d7e3cb3c6fb062c0ce, got %s", data.AkamaiHash)
+	}
+}

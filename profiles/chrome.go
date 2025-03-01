@@ -5,7 +5,42 @@ import (
 	tls "github.com/nukilabs/utls"
 )
 
-var Chrome_120 = ClientProfile{
+func Chrome(major int) ClientProfile {
+	switch major {
+	case 120:
+		return Chrome120
+	case 121:
+		return Chrome121
+	case 122:
+		return Chrome122
+	case 123:
+		return Chrome123
+	case 124:
+		return Chrome124
+	case 125:
+		return Chrome125
+	case 126:
+		return Chrome126
+	case 127:
+		return Chrome127
+	case 128:
+		return Chrome128
+	case 129:
+		return Chrome129
+	case 130:
+		return Chrome130
+	case 131:
+		return Chrome131
+	case 132:
+		return Chrome132
+	case 133:
+		return Chrome133
+	default:
+		return Chrome133
+	}
+}
+
+var Chrome120 = ClientProfile{
 	ClientHelloSpec: func() *tls.ClientHelloSpec {
 		return &tls.ClientHelloSpec{
 			CipherSuites: []uint16{
@@ -102,7 +137,13 @@ var Chrome_120 = ClientProfile{
 	},
 }
 
-var Chrome_124 = ClientProfile{
+var Chrome121 = Chrome120
+
+var Chrome122 = Chrome120
+
+var Chrome123 = Chrome120
+
+var Chrome124 = ClientProfile{
 	ClientHelloSpec: func() *tls.ClientHelloSpec {
 		return &tls.ClientHelloSpec{
 			CipherSuites: []uint16{
@@ -201,6 +242,18 @@ var Chrome_124 = ClientProfile{
 	},
 }
 
+var Chrome125 = Chrome124
+
+var Chrome126 = Chrome124
+
+var Chrome127 = Chrome124
+
+var Chrome128 = Chrome124
+
+var Chrome129 = Chrome124
+
+var Chrome130 = Chrome124
+
 var Chrome131 = ClientProfile{
 	ClientHelloSpec: func() *tls.ClientHelloSpec {
 		return &tls.ClientHelloSpec{
@@ -297,6 +350,8 @@ var Chrome131 = ClientProfile{
 		":path",
 	},
 }
+
+var Chrome132 = Chrome131
 
 var Chrome133 = ClientProfile{
 	ClientHelloSpec: func() *tls.ClientHelloSpec {
