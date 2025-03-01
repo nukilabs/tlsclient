@@ -233,7 +233,7 @@ func TestHttpUrlConnectionAndroid34(t *testing.T) {
 }
 
 func TestHttpUrlConnectionAndroid35(t *testing.T) {
-	c := tlsclient.New(profiles.HttpUrlConnectionAndroid(34))
+	c := tlsclient.New(profiles.HttpUrlConnectionAndroid(35))
 	res, err := c.Get("https://tls.peet.ws/api/clean")
 	if err != nil {
 		t.Fatal(err)

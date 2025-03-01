@@ -275,7 +275,7 @@ func TestOkhttp4Android34(t *testing.T) {
 }
 
 func TestOkhttp4Android35(t *testing.T) {
-	c := tlsclient.New(profiles.Okhttp4Android(34))
+	c := tlsclient.New(profiles.Okhttp4Android(35))
 	res, err := c.Get("https://tls.peet.ws/api/clean")
 	if err != nil {
 		t.Fatal(err)
