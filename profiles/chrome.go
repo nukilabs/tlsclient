@@ -35,6 +35,8 @@ func Chrome(major int) ClientProfile {
 		return Chrome132
 	case 133:
 		return Chrome133
+	case 134:
+		return Chrome134
 	default:
 		return Chrome133
 	}
@@ -449,3 +451,5 @@ var Chrome133 = ClientProfile{
 		":path",
 	},
 }
+
+var Chrome134 = Chrome133
