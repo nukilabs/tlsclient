@@ -34,7 +34,9 @@ func (p *Pinner) Pin(conn *tls.UConn, hostname string) error {
 	defer p.RUnlock()
 
 	if _, ok := p.pins[hostname]; !ok && p.auto {
+		p.RUnlock()
 		p.AutoPin(hostname)
+		p.RLock()
 	} else if !ok {
 		return nil
 	}
