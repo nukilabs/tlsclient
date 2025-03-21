@@ -18,6 +18,7 @@ type Pinner struct {
 
 func NewPinner(auto bool) *Pinner {
 	return &Pinner{
+		auto: auto,
 		pins: make(map[string][]string),
 	}
 }
