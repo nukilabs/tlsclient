@@ -63,7 +63,7 @@ func TestChrome133(t *testing.T) {
 }
 
 func TestChrome134(t *testing.T) {
-	c := tlsclient.New(profiles.Chrome133)
+	c := tlsclient.New(profiles.Chrome134)
 	res1, err := c.Get("https://tls.peet.ws/api/clean")
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +97,7 @@ func TestChrome134(t *testing.T) {
 }
 
 func TestChrome135(t *testing.T) {
-	c := tlsclient.New(profiles.Chrome133)
+	c := tlsclient.New(profiles.Chrome135)
 	res1, err := c.Get("https://tls.peet.ws/api/clean")
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +131,7 @@ func TestChrome135(t *testing.T) {
 }
 
 func TestChrome136(t *testing.T) {
-	c := tlsclient.New(profiles.Chrome133)
+	c := tlsclient.New(profiles.Chrome136)
 	res1, err := c.Get("https://tls.peet.ws/api/clean")
 	if err != nil {
 		t.Fatal(err)
@@ -165,7 +165,7 @@ func TestChrome136(t *testing.T) {
 }
 
 func TestChrome137(t *testing.T) {
-	c := tlsclient.New(profiles.Chrome133)
+	c := tlsclient.New(profiles.Chrome137)
 	res1, err := c.Get("https://tls.peet.ws/api/clean")
 	if err != nil {
 		t.Fatal(err)
