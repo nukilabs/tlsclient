@@ -35,6 +35,12 @@ func WithNoCookieJar() Option {
 	}
 }
 
+func WithNoFollowRedirects() Option {
+	return func(c *Client) {
+		c.Client.CheckRedirect = nil
+	}
+}
+
 func WithTracker(tracker bandwidth.Tracker) Option {
 	return func(c *Client) {
 		c.tracker = tracker
