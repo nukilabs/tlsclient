@@ -422,7 +422,7 @@ var Chrome133 = ClientProfile{
 				&tls.ApplicationSettingsExtensionNew{
 					SupportedProtocols: []string{"h2"},
 				},
-				&tls.ALPNExtension{AlpnProtocols: []string{"h2", "http/1.1"}},
+				&tls.ALPNExtension{AlpnProtocols: []string{"h3", "h2", "http/1.1"}},
 				&tls.StatusRequestExtension{},
 				&tls.SupportedVersionsExtension{Versions: []uint16{
 					tls.GREASE_PLACEHOLDER,

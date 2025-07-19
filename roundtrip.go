@@ -10,6 +10,7 @@ import (
 
 	"github.com/nukilabs/http"
 	"github.com/nukilabs/http/http2"
+	"github.com/nukilabs/quic-go/http3"
 	"github.com/nukilabs/tlsclient/bandwidth"
 	"github.com/nukilabs/tlsclient/profiles"
 	tls "github.com/nukilabs/utls"
@@ -174,6 +175,22 @@ func (rt *RoundTripper) buildHttp2Transport() http.RoundTripper {
 	}
 }
 
+func (rt *RoundTripper) buildHttp3Transport() http.RoundTripper {
+	settings := make(map[uint64]uint64)
+	for _, setting := range rt.profile.Settings {
+		settings[uint64(setting.ID)] = uint64(setting.Val)
+	}
+	return &http3.Transport{
+		DisableCompression: true,
+		TLSClientConfig: &tls.Config{
+			ClientSessionCache: rt.clientSessionCache,
+			InsecureSkipVerify: rt.insecureSkipVerify,
+			OmitEmptyPsk:       true,
+		},
+		AdditionalSettings: settings,
+	}
+}
+
 func (rt *RoundTripper) dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	if network == "tcp" && (rt.disableIPV6) {
 		network = "tcp4"
@@ -235,6 +252,8 @@ func (rt *RoundTripper) dialTLSContext(ctx context.Context, network, addr string
 
 	state := conn.ConnectionState()
 	switch state.NegotiatedProtocol {
+	case http3.NextProtoH3:
+		rt.transports[addr] = rt.buildHttp3Transport()
 	case http2.NextProtoTLS:
 		rt.transports[addr] = rt.buildHttp2Transport()
 	default:
