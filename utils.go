@@ -1,7 +1,7 @@
 package tlsclient
 
 import (
-	http "github.com/nukilabs/http"
+	"github.com/nukilabs/http"
 	tls "github.com/nukilabs/utls"
 )
 

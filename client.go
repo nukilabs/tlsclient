@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	http "github.com/nukilabs/http"
+	"github.com/nukilabs/http"
 	"github.com/nukilabs/http/cookiejar"
 	"github.com/nukilabs/tlsclient/bandwidth"
 	"github.com/nukilabs/tlsclient/profiles"

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	http "github.com/nukilabs/http"
+	"github.com/nukilabs/http"
 	"github.com/nukilabs/http/http2"
 	"golang.org/x/net/proxy"
 )
