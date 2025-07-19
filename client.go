@@ -140,7 +140,7 @@ func (c *Client) CloseIdleConnections() {
 	c.Client.CloseIdleConnections()
 }
 
-func (c *Client) SetCustomRedirectFunc(f func(req *http.Request, via []*http.Request) error) {
+func (c *Client) SetRedirectFunc(f func(req *http.Request, via []*http.Request) error) {
 	c.Client.CheckRedirect = f
 	c.redirect = f
 }
