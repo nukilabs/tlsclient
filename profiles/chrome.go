@@ -43,6 +43,8 @@ func Chrome(major int) ClientProfile {
 		return Chrome136
 	case 137:
 		return Chrome137
+	case 138:
+		return Chrome138
 	default:
 		return Chrome135
 	}
@@ -116,7 +118,6 @@ var Chrome120 = ClientProfile{
 					tls.CertCompressionBrotli,
 				}},
 				&tls.ApplicationSettingsExtension{
-					CodePoint:          tls.ExtensionALPSOld,
 					SupportedProtocols: []string{"h2"},
 				},
 				tls.BoringGREASEECH(),
@@ -219,7 +220,6 @@ var Chrome124 = ClientProfile{
 					tls.PKCS1WithSHA512,
 				}},
 				&tls.ApplicationSettingsExtension{
-					CodePoint:          tls.ExtensionALPSOld,
 					SupportedProtocols: []string{"h2"},
 				},
 				&tls.RenegotiationInfoExtension{Renegotiation: tls.RenegotiateOnceAsClient},
@@ -322,7 +322,6 @@ var Chrome131 = ClientProfile{
 					tls.CertCompressionBrotli,
 				}},
 				&tls.ApplicationSettingsExtension{
-					CodePoint:          tls.ExtensionALPSOld,
 					SupportedProtocols: []string{"h2"},
 				},
 				&tls.ALPNExtension{AlpnProtocols: []string{"h2", "http/1.1"}},
@@ -420,8 +419,7 @@ var Chrome133 = ClientProfile{
 				&tls.UtlsCompressCertExtension{Algorithms: []tls.CertCompressionAlgo{
 					tls.CertCompressionBrotli,
 				}},
-				&tls.ApplicationSettingsExtension{
-					CodePoint:          tls.ExtensionALPS,
+				&tls.ApplicationSettingsExtensionNew{
 					SupportedProtocols: []string{"h2"},
 				},
 				&tls.ALPNExtension{AlpnProtocols: []string{"h2", "http/1.1"}},
@@ -465,3 +463,5 @@ var Chrome135 = Chrome133
 var Chrome136 = Chrome133
 
 var Chrome137 = Chrome133
+
+var Chrome138 = Chrome133
