@@ -5,7 +5,7 @@ import (
 	tls "github.com/nukilabs/utls"
 )
 
-var Safari_17 = ClientProfile{
+var Safari17 = ClientProfile{
 	ClientHelloSpec: func() *tls.ClientHelloSpec {
 		return &tls.ClientHelloSpec{
 			CipherSuites: []uint16{
