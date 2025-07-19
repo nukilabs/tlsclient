@@ -420,7 +420,7 @@ var Chrome133 = ClientProfile{
 					tls.CertCompressionBrotli,
 				}},
 				&tls.ApplicationSettingsExtensionNew{
-					SupportedProtocols: []string{"h2"},
+					SupportedProtocols: []string{"h3", "h2"},
 				},
 				&tls.ALPNExtension{AlpnProtocols: []string{"h3", "h2", "http/1.1"}},
 				&tls.StatusRequestExtension{},
