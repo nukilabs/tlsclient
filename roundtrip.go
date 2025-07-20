@@ -333,8 +333,9 @@ func (rt *RoundTripper) dialQuic(ctx context.Context, addr string, tlscfg *tls.C
 	if err != nil {
 		return nil, err
 	}
+	trackedUdpConn := bandwidth.NewTrackedUDPConn(udpConn, rt.tracker)
 	transport := &quic.Transport{
-		Conn: udpConn,
+		Conn: trackedUdpConn,
 	}
 	conn, err := transport.DialEarly(ctx, udpaddr, tlscfg, cfg)
 	if err != nil {

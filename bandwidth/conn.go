@@ -25,3 +25,27 @@ func NewTrackedConn(conn net.Conn, tracker Tracker) net.Conn {
 		tracker: tracker,
 	}
 }
+
+type TrackedUDPConn struct {
+	net.PacketConn
+	tracker Tracker
+}
+
+func (t *TrackedUDPConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	n, addr, err = t.PacketConn.ReadFrom(p)
+	t.tracker.AddReadBytes(int64(n))
+	return
+}
+
+func (t *TrackedUDPConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	n, err = t.PacketConn.WriteTo(p, addr)
+	t.tracker.AddWriteBytes(int64(n))
+	return
+}
+
+func NewTrackedUDPConn(udpConn net.PacketConn, tracker Tracker) net.PacketConn {
+	return &TrackedUDPConn{
+		PacketConn: udpConn,
+		tracker:    tracker,
+	}
+}
