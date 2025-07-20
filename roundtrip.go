@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"net"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/nukilabs/http"
 	"github.com/nukilabs/http/http2"
+	"github.com/nukilabs/quic-go"
 	"github.com/nukilabs/quic-go/http3"
 	"github.com/nukilabs/tlsclient/bandwidth"
 	"github.com/nukilabs/tlsclient/profiles"
@@ -40,6 +42,8 @@ type RoundTripper struct {
 	transportLock sync.Mutex
 	transports    map[string]http.RoundTripper
 	connections   map[string]net.Conn
+
+	altsvc sync.Map
 }
 
 func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer, pinner *Pinner, tracker bandwidth.Tracker, opts *TransportOptions) *RoundTripper {
@@ -101,6 +105,30 @@ func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer,
 	}
 }
 
+func (rt *RoundTripper) CloseIdleConnections() {
+	rt.transportLock.Lock()
+	defer rt.transportLock.Unlock()
+
+	for addr, transport := range rt.transports {
+		if t, ok := transport.(*http3.Transport); ok {
+			t.CloseIdleConnections()
+		} else if t, ok := transport.(*http2.Transport); ok {
+			t.CloseIdleConnections()
+		} else if t, ok := transport.(*http.Transport); ok {
+			t.CloseIdleConnections()
+		}
+		delete(rt.transports, addr)
+	}
+
+	rt.Lock()
+	defer rt.Unlock()
+
+	for addr, conn := range rt.connections {
+		conn.Close()
+		delete(rt.connections, addr)
+	}
+}
+
 func (rt *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	var addr string
 	host, port, err := net.SplitHostPort(req.URL.Host)
@@ -115,12 +143,27 @@ func (rt *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 
-	return transport.RoundTrip(req)
+	res, err := transport.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+
+	altsvc := res.Header.Get("Alt-Svc")
+	if strings.HasPrefix(altsvc, "h3") {
+		rt.altsvc.Store(addr, true)
+	}
+
+	return res, nil
 }
 
 func (rt *RoundTripper) getTransport(ctx context.Context, scheme, addr string) (http.RoundTripper, error) {
 	rt.transportLock.Lock()
 	defer rt.transportLock.Unlock()
+
+	if _, ok := rt.altsvc.Load(addr); ok {
+		rt.transports[addr] = rt.buildHttp3Transport()
+		return rt.transports[addr], nil
+	}
 
 	if t, ok := rt.transports[addr]; ok {
 		return t, nil
@@ -177,8 +220,10 @@ func (rt *RoundTripper) buildHttp2Transport() http.RoundTripper {
 
 func (rt *RoundTripper) buildHttp3Transport() http.RoundTripper {
 	settings := make(map[uint64]uint64)
-	for _, setting := range rt.profile.Settings {
-		settings[uint64(setting.ID)] = uint64(setting.Val)
+	order := make([]uint64, 0, len(rt.profile.H3Settings))
+	for _, setting := range rt.profile.H3Settings {
+		settings[setting.ID] = setting.Val
+		order = append(order, setting.ID)
 	}
 	return &http3.Transport{
 		DisableCompression: true,
@@ -187,7 +232,17 @@ func (rt *RoundTripper) buildHttp3Transport() http.RoundTripper {
 			InsecureSkipVerify: rt.insecureSkipVerify,
 			OmitEmptyPsk:       true,
 		},
-		AdditionalSettings: settings,
+		QUICConfig: &quic.Config{
+			MaxIdleTimeout:                 90 * time.Second,
+			KeepAlivePeriod:                30 * time.Second,
+			InitialStreamReceiveWindow:     512 * 1024,
+			InitialConnectionReceiveWindow: 1024 * 1024,
+			EnableDatagrams:                true,
+		},
+		AdditionalSettings:      settings,
+		AdditionalSettingsOrder: order,
+		PseudoHeaderOrder:       rt.profile.PseudoHeaderOrder,
+		Dial:                    rt.dialQuic,
 	}
 }
 
@@ -267,4 +322,24 @@ func (rt *RoundTripper) dialTLSContext(ctx context.Context, network, addr string
 
 func (rt *RoundTripper) dialTLSContextHTTP2(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
 	return rt.dialTLSContext(ctx, network, addr)
+}
+
+func (rt *RoundTripper) dialQuic(ctx context.Context, addr string, tlscfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
+	udpaddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+	udpConn, err := net.ListenUDP("udp", nil)
+	if err != nil {
+		return nil, err
+	}
+	transport := &quic.Transport{
+		Conn: udpConn,
+	}
+	conn, err := transport.DialEarly(ctx, udpaddr, tlscfg, cfg)
+	if err != nil {
+		udpConn.Close()
+		return nil, err
+	}
+	return conn, nil
 }

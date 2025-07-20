@@ -2,6 +2,7 @@ package profiles
 
 import (
 	"github.com/nukilabs/http/http2"
+	"github.com/nukilabs/quic-go/http3"
 	tls "github.com/nukilabs/utls"
 )
 
@@ -441,6 +442,13 @@ var Chrome133 = ClientProfile{
 		{ID: http2.SettingEnablePush, Val: 0},
 		{ID: http2.SettingInitialWindowSize, Val: 6291456},
 		{ID: http2.SettingMaxHeaderListSize, Val: 262144},
+	},
+	H3Settings: []http3.Setting{
+		{ID: http3.SettingQpackMaxTableCapacity, Val: 65536},
+		{ID: http3.SettingMaxFieldSectionSize, Val: 262144},
+		{ID: http3.SettingQpackBlockedStreams, Val: 100},
+		{ID: http3.SettingH3Datagram, Val: 1},
+		{ID: http3.SettingGrease, Val: 0},
 	},
 	ConnectionFlow: 15663105,
 	HeaderPriority: http2.PriorityParam{
