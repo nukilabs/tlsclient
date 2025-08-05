@@ -2,7 +2,6 @@ package tlsclient
 
 import (
 	"io"
-	"net"
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -10,22 +9,25 @@ import (
 
 	"github.com/nukilabs/http"
 	"github.com/nukilabs/http/cookiejar"
+	"github.com/nukilabs/quic-go"
 	"github.com/nukilabs/tlsclient/bandwidth"
 	"github.com/nukilabs/tlsclient/profiles"
-	"golang.org/x/net/proxy"
+	"github.com/nukilabs/tlsclient/proxy"
+	tls "github.com/nukilabs/utls"
 )
 
 type Client struct {
 	http.Client
-	profile   profiles.ClientProfile
-	pinner    *Pinner
-	tracker   bandwidth.Tracker
-	proxyURL  *url.URL
-	localAddr *net.TCPAddr
-	hooks     []HookFunc
-	inHook    atomic.Bool
-	redirect  func(req *http.Request, via []*http.Request) error
-	opts      *TransportOptions
+	profile  profiles.ClientProfile
+	pinner   *Pinner
+	tracker  bandwidth.Tracker
+	proxyURL *url.URL
+	hooks    []HookFunc
+	inHook   atomic.Bool
+	redirect func(req *http.Request, via []*http.Request) error
+	tlsConf  *tls.Config
+	quicConf *quic.Config
+	opts     *TransportOptions
 
 	AutoDecompress bool
 }
@@ -41,7 +43,11 @@ func New(profile profiles.ClientProfile, options ...Option) *Client {
 			CheckRedirect: nil,
 		},
 		profile: profile,
-
+		tlsConf: &tls.Config{},
+		quicConf: &quic.Config{
+			KeepAlivePeriod: 30 * time.Second,
+			EnableDatagrams: true,
+		},
 		AutoDecompress: true,
 		tracker:        bandwidth.NewNoopTracker(),
 	}
@@ -51,7 +57,8 @@ func New(profile profiles.ClientProfile, options ...Option) *Client {
 	if client.pinner == nil {
 		client.pinner = NewPinner(false)
 	}
-	client.Transport = NewRoundTripper(profile, proxy.Direct, client.pinner, client.tracker, client.opts)
+	dialer := proxy.Direct(client.Timeout)
+	client.Transport = NewRoundTripper(profile, dialer, client.pinner, client.tracker, client.tlsConf, client.quicConf, client.opts)
 	return client
 }
 
@@ -60,10 +67,10 @@ func (c *Client) GetProxy() *url.URL {
 }
 
 func (c *Client) SetProxy(proxyUrl *url.URL) error {
-	currentProxy := c.proxyURL
+	oldProxy := c.proxyURL
 	c.proxyURL = proxyUrl
 	if err := c.applyProxy(); err != nil {
-		c.proxyURL = currentProxy
+		c.proxyURL = oldProxy
 		if err := c.applyProxy(); err != nil {
 			c.proxyURL = nil
 			return c.applyProxy()
@@ -73,42 +80,11 @@ func (c *Client) SetProxy(proxyUrl *url.URL) error {
 }
 
 func (c *Client) applyProxy() error {
-	var dialer proxy.ContextDialer = proxy.Direct
-	if c.proxyURL != nil {
-		proxyDialer, err := NewConnectDialer(c.proxyURL, c.Timeout)
-		if err != nil {
-			return err
-		}
-		dialer = proxyDialer
+	dialer, err := proxy.New(c.proxyURL, c.Timeout, c.tlsConf)
+	if err != nil {
+		return err
 	}
-	c.Transport = NewRoundTripper(c.profile, dialer, c.pinner, c.tracker, c.opts)
-	return nil
-}
-
-func (c *Client) RemoveProxy() {
-	c.proxyURL = nil
-	c.Transport = NewRoundTripper(c.profile, proxy.Direct, c.pinner, c.tracker, c.opts)
-}
-
-func (c *Client) SetLocalAddr(addr *net.TCPAddr) error {
-	currentAddr := c.localAddr
-	c.localAddr = addr
-	if err := c.applyLocalAddr(); err != nil {
-		c.localAddr = currentAddr
-		if err := c.applyLocalAddr(); err != nil {
-			c.localAddr = nil
-			return c.applyLocalAddr()
-		}
-	}
-	return nil
-}
-
-func (c *Client) applyLocalAddr() error {
-	var dialer proxy.ContextDialer = proxy.Direct
-	if c.localAddr != nil {
-		dialer = NewDirectDialer(c.localAddr, c.Timeout)
-	}
-	c.Transport = NewRoundTripper(c.profile, dialer, c.pinner, c.tracker, c.opts)
+	c.Transport = NewRoundTripper(c.profile, dialer, c.pinner, c.tracker, c.tlsConf, c.quicConf, c.opts)
 	return nil
 }
 
@@ -180,7 +156,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 }
 
 func (c *Client) Get(url string) (*http.Response, error) {
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -1,21 +1,24 @@
 package bandwidth
 
-import "net"
+import (
+	"errors"
+	"net"
+)
 
 type TrackedConn struct {
 	net.Conn
 	tracker Tracker
 }
 
-func (t *TrackedConn) Read(p []byte) (n int, err error) {
-	n, err = t.Conn.Read(p)
-	t.tracker.AddReadBytes(int64(n))
+func (c *TrackedConn) Read(p []byte) (n int, err error) {
+	n, err = c.Conn.Read(p)
+	c.tracker.AddReadBytes(int64(n))
 	return
 }
 
-func (t *TrackedConn) Write(p []byte) (n int, err error) {
-	n, err = t.Conn.Write(p)
-	t.tracker.AddWriteBytes(int64(n))
+func (c *TrackedConn) Write(p []byte) (n int, err error) {
+	n, err = c.Conn.Write(p)
+	c.tracker.AddWriteBytes(int64(n))
 	return
 }
 
@@ -26,26 +29,44 @@ func NewTrackedConn(conn net.Conn, tracker Tracker) net.Conn {
 	}
 }
 
-type TrackedUDPConn struct {
+type PacketConn interface {
 	net.PacketConn
+	SetReadBuffer(bytes int) error
+	SetWriteBuffer(bytes int) error
+}
+
+type TrackedPacketConn struct {
+	PacketConn
 	tracker Tracker
 }
 
-func (t *TrackedUDPConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	n, addr, err = t.PacketConn.ReadFrom(p)
-	t.tracker.AddReadBytes(int64(n))
+func (c *TrackedPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	n, addr, err = c.PacketConn.ReadFrom(p)
+	c.tracker.AddReadBytes(int64(n))
 	return
 }
 
-func (t *TrackedUDPConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	n, err = t.PacketConn.WriteTo(p, addr)
-	t.tracker.AddWriteBytes(int64(n))
+func (c *TrackedPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	n, err = c.PacketConn.WriteTo(p, addr)
+	c.tracker.AddWriteBytes(int64(n))
 	return
 }
 
-func NewTrackedUDPConn(udpConn net.PacketConn, tracker Tracker) net.PacketConn {
-	return &TrackedUDPConn{
-		PacketConn: udpConn,
-		tracker:    tracker,
+func (c *TrackedPacketConn) SetReadBuffer(bytes int) error {
+	return c.PacketConn.SetReadBuffer(bytes)
+}
+
+func (c *TrackedPacketConn) SetWriteBuffer(bytes int) error {
+	return c.PacketConn.SetWriteBuffer(bytes)
+}
+
+func NewTrackedPacketConn(conn net.PacketConn, tracker Tracker) (net.PacketConn, error) {
+	pconn, ok := conn.(PacketConn)
+	if !ok {
+		return nil, errors.New("connection does not implement set read/write buffer methods")
 	}
+	return &TrackedPacketConn{
+		PacketConn: pconn,
+		tracker:    tracker,
+	}, nil
 }

@@ -3,16 +3,17 @@ package tlsclient
 import (
 	"time"
 
+	"github.com/nukilabs/quic-go"
 	"github.com/nukilabs/tlsclient/bandwidth"
+	tls "github.com/nukilabs/utls"
 )
 
 type TransportOptions struct {
-	ServerNameOverride string
-	InsecureSkipVerify bool
-	DisableKeepAlives  bool
-	IdleConnTimeout    time.Duration
-	DisableIPV4        bool
-	DisableIPV6        bool
+	DisableKeepAlives bool
+	IdleConnTimeout   time.Duration
+	DisableIPV4       bool
+	DisableIPV6       bool
+	DisableHTTP3      bool
 }
 
 type Option func(*Client)
@@ -50,6 +51,18 @@ func WithTracker(tracker bandwidth.Tracker) Option {
 func WithTimeout(timeout time.Duration) Option {
 	return func(c *Client) {
 		c.Timeout = timeout
+	}
+}
+
+func WithTLSConfig(tlsConf *tls.Config) Option {
+	return func(c *Client) {
+		c.tlsConf = tlsConf
+	}
+}
+
+func WithQUICConfig(quicConf *quic.Config) Option {
+	return func(c *Client) {
+		c.quicConf = quicConf
 	}
 }
 

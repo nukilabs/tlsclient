@@ -9,9 +9,13 @@ import (
 type ClientProfile struct {
 	ClientHelloSpec   func() *tls.ClientHelloSpec
 	Settings          []http2.Setting
-	H3Settings        []http3.Setting
 	ConnectionFlow    uint32
 	Priorities        []http2.Priority
 	HeaderPriority    http2.PriorityParam
+	H3                *H3ClientProfile
 	PseudoHeaderOrder []string
+}
+
+type H3ClientProfile struct {
+	Settings []http3.Setting
 }

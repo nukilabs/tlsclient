@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
-	"net"
 	"sync"
 
 	tls "github.com/nukilabs/utls"
@@ -29,22 +28,21 @@ func (p *Pinner) AddPins(hostname string, pins []string) {
 	p.pins[hostname] = pins
 }
 
-func (p *Pinner) Pin(conn *tls.UConn, hostname string) error {
+func (p *Pinner) Pin(certs []*x509.Certificate, addr string) error {
 	p.RLock()
 	defer p.RUnlock()
 
-	if _, ok := p.pins[hostname]; !ok && p.auto {
+	if _, ok := p.pins[addr]; !ok && p.auto {
 		p.RUnlock()
-		p.AutoPin(hostname)
+		p.AutoPin(addr)
 		p.RLock()
 	} else if !ok {
 		return nil
 	}
 
-	state := conn.ConnectionState()
-	for _, cert := range state.PeerCertificates {
+	for _, cert := range certs {
 		fingerprint := p.Fingerprint(cert)
-		for _, pin := range p.pins[hostname] {
+		for _, pin := range p.pins[addr] {
 			if fingerprint == pin {
 				return nil
 			}
@@ -59,17 +57,9 @@ func (p *Pinner) Fingerprint(cert *x509.Certificate) string {
 	return base64.StdEncoding.EncodeToString(digest[:])
 }
 
-func (p *Pinner) AutoPin(hostname string) {
+func (p *Pinner) AutoPin(addr string) {
 	p.Lock()
 	defer p.Unlock()
-
-	var addr string
-	host, port, err := net.SplitHostPort(hostname)
-	if err == nil {
-		addr = net.JoinHostPort(host, port)
-	} else {
-		addr = net.JoinHostPort(hostname, "443")
-	}
 
 	conn, err := tls.Dial("tcp", addr, &tls.Config{InsecureSkipVerify: true})
 	if err != nil {
@@ -85,5 +75,5 @@ func (p *Pinner) AutoPin(hostname string) {
 		pins = append(pins, p.Fingerprint(cert))
 	}
 
-	p.pins[hostname] = pins
+	p.pins[addr] = pins
 }

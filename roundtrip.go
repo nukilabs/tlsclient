@@ -15,8 +15,8 @@ import (
 	"github.com/nukilabs/quic-go/http3"
 	"github.com/nukilabs/tlsclient/bandwidth"
 	"github.com/nukilabs/tlsclient/profiles"
+	"github.com/nukilabs/tlsclient/proxy"
 	tls "github.com/nukilabs/utls"
-	"golang.org/x/net/proxy"
 )
 
 type RoundTripper struct {
@@ -26,13 +26,15 @@ type RoundTripper struct {
 	pinner  *Pinner
 	tracker bandwidth.Tracker
 
+	tlsConf  *tls.Config
+	quicConf *quic.Config
+
 	clientSessionCache tls.ClientSessionCache
-	serverNameOverride string
-	insecureSkipVerify bool
 	disableKeepAlives  bool
 	idleConnTimeout    time.Duration
 	disableIPV4        bool
 	disableIPV6        bool
+	disableHTTP3       bool
 
 	maxUploadBufferPerConnection int32
 	maxReadFrameSize             uint32
@@ -46,24 +48,22 @@ type RoundTripper struct {
 	altsvc sync.Map
 }
 
-func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer, pinner *Pinner, tracker bandwidth.Tracker, opts *TransportOptions) *RoundTripper {
+func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer, pinner *Pinner, tracker bandwidth.Tracker, tlsConf *tls.Config, quicConf *quic.Config, opts *TransportOptions) *RoundTripper {
 	var clientSessionCache tls.ClientSessionCache
 	if supportsSessionResumption(profile.ClientHelloSpec()) {
 		clientSessionCache = tls.NewLRUClientSessionCache(32)
 	}
-	var serverNameOverride string
-	var insecureSkipVerify, disableKeepAlives bool
+	var disableKeepAlives bool
 	var idleConnTimeout time.Duration = 90 * time.Second
-	var disableIPV4, disableIPV6 bool
+	var disableIPV4, disableIPV6, disableHTTP3 bool
 	if opts != nil {
-		serverNameOverride = opts.ServerNameOverride
-		insecureSkipVerify = opts.InsecureSkipVerify
 		disableKeepAlives = opts.DisableKeepAlives
 		if opts.IdleConnTimeout != 0 {
 			idleConnTimeout = opts.IdleConnTimeout
 		}
 		disableIPV4 = opts.DisableIPV4
 		disableIPV6 = opts.DisableIPV6
+		disableHTTP3 = opts.DisableHTTP3
 	}
 	var maxHeaderTableSize, maxReadFrameSize, maxHeaderListSize uint32
 	if idx := slices.IndexFunc(profile.Settings, func(s http2.Setting) bool {
@@ -87,13 +87,15 @@ func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer,
 		pinner:  pinner,
 		tracker: tracker,
 
+		tlsConf:  tlsConf,
+		quicConf: quicConf,
+
 		clientSessionCache: clientSessionCache,
-		serverNameOverride: serverNameOverride,
-		insecureSkipVerify: insecureSkipVerify,
 		disableKeepAlives:  disableKeepAlives,
 		idleConnTimeout:    idleConnTimeout,
 		disableIPV4:        disableIPV4,
 		disableIPV6:        disableIPV6,
+		disableHTTP3:       disableHTTP3,
 
 		maxUploadBufferPerConnection: int32(profile.ConnectionFlow),
 		maxReadFrameSize:             maxReadFrameSize,
@@ -138,7 +140,7 @@ func (rt *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		addr = net.JoinHostPort(host, port)
 	}
 
-	transport, err := rt.getTransport(req.Context(), req.URL.Scheme, addr)
+	transport, err := rt.getTransport(req.Context(), req.Proto, req.URL.Scheme, addr)
 	if err != nil {
 		return nil, err
 	}
@@ -156,11 +158,32 @@ func (rt *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return res, nil
 }
 
-func (rt *RoundTripper) getTransport(ctx context.Context, scheme, addr string) (http.RoundTripper, error) {
+func (rt *RoundTripper) forceHTTP3(proto, addr string) bool {
+	if rt.profile.H3 == nil || rt.disableHTTP3 || !rt.dialer.SupportHTTP3() {
+		return false
+	}
+	if _, ok := rt.altsvc.Load(addr); ok {
+		return true
+	}
+	if len(rt.tlsConf.NextProtos) == 1 && rt.tlsConf.NextProtos[0] == http3.NextProtoH3 {
+		return true
+	}
+	if strings.EqualFold(proto, "HTTP/3.0") || strings.EqualFold(proto, "h3") {
+		return true
+	}
+	return false
+}
+
+func (rt *RoundTripper) getTransport(ctx context.Context, proto, scheme, addr string) (http.RoundTripper, error) {
 	rt.transportLock.Lock()
 	defer rt.transportLock.Unlock()
 
-	if _, ok := rt.altsvc.Load(addr); ok {
+	if rt.forceHTTP3(proto, addr) {
+		if t, ok := rt.transports[addr]; ok {
+			if _, ok := t.(*http3.Transport); ok {
+				return t, nil
+			}
+		}
 		rt.transports[addr] = rt.buildHttp3Transport()
 		return rt.transports[addr], nil
 	}
@@ -183,29 +206,29 @@ func (rt *RoundTripper) getTransport(ctx context.Context, scheme, addr string) (
 }
 
 func (rt *RoundTripper) buildHttp1Transport() http.RoundTripper {
+	tlsConf := rt.tlsConf.Clone()
+	tlsConf.ClientSessionCache = rt.clientSessionCache
+	tlsConf.OmitEmptyPsk = true
 	return &http.Transport{
 		DialContext:        rt.dialContext,
 		DialTLSContext:     rt.dialTLSContext,
 		DisableCompression: true,
-		TLSClientConfig: &tls.Config{
-			ClientSessionCache: rt.clientSessionCache,
-			InsecureSkipVerify: rt.insecureSkipVerify,
-			OmitEmptyPsk:       true,
-		},
-		DisableKeepAlives: rt.disableKeepAlives,
-		IdleConnTimeout:   rt.idleConnTimeout,
+		TLSClientConfig:    tlsConf,
+		DisableKeepAlives:  rt.disableKeepAlives,
+		IdleConnTimeout:    rt.idleConnTimeout,
 	}
 }
 
 func (rt *RoundTripper) buildHttp2Transport() http.RoundTripper {
+	tlsConf := rt.tlsConf.Clone()
+	tlsConf.ClientSessionCache = rt.clientSessionCache
+	tlsConf.OmitEmptyPsk = true
 	return &http2.Transport{
-		DialTLSContext:     rt.dialTLSContextHTTP2,
-		DisableCompression: true,
-		TLSClientConfig: &tls.Config{
-			ClientSessionCache: rt.clientSessionCache,
-			InsecureSkipVerify: rt.insecureSkipVerify,
-			OmitEmptyPsk:       true,
+		DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
+			return rt.dialTLSContext(ctx, network, addr)
 		},
+		DisableCompression:           true,
+		TLSClientConfig:              tlsConf,
 		MaxUploadBufferPerConnection: rt.maxUploadBufferPerConnection,
 		Settings:                     rt.profile.Settings,
 		Priorities:                   rt.profile.Priorities,
@@ -220,29 +243,26 @@ func (rt *RoundTripper) buildHttp2Transport() http.RoundTripper {
 
 func (rt *RoundTripper) buildHttp3Transport() http.RoundTripper {
 	settings := make(map[uint64]uint64)
-	order := make([]uint64, 0, len(rt.profile.H3Settings))
-	for _, setting := range rt.profile.H3Settings {
+	order := make([]uint64, 0, len(rt.profile.H3.Settings))
+	for _, setting := range rt.profile.H3.Settings {
 		settings[setting.ID] = setting.Val
 		order = append(order, setting.ID)
 	}
+	tlsConf := rt.tlsConf.Clone()
+	tlsConf.ClientSessionCache = rt.clientSessionCache
+	tlsConf.OmitEmptyPsk = true
+	quicConf := rt.quicConf.Clone()
+	quicConf.MaxIdleTimeout = rt.idleConnTimeout
+	quicConf.EnableDatagrams = true
 	return &http3.Transport{
-		DisableCompression: true,
-		TLSClientConfig: &tls.Config{
-			ClientSessionCache: rt.clientSessionCache,
-			InsecureSkipVerify: rt.insecureSkipVerify,
-			OmitEmptyPsk:       true,
-		},
-		QUICConfig: &quic.Config{
-			MaxIdleTimeout:                 90 * time.Second,
-			KeepAlivePeriod:                30 * time.Second,
-			InitialStreamReceiveWindow:     512 * 1024,
-			InitialConnectionReceiveWindow: 1024 * 1024,
-			EnableDatagrams:                true,
-		},
+		DisableCompression:      true,
+		TLSClientConfig:         tlsConf,
+		QUICConfig:              quicConf,
 		AdditionalSettings:      settings,
 		AdditionalSettingsOrder: order,
 		PseudoHeaderOrder:       rt.profile.PseudoHeaderOrder,
 		Dial:                    rt.dialQuic,
+		EnableDatagrams:         true,
 	}
 }
 
@@ -279,13 +299,11 @@ func (rt *RoundTripper) dialTLSContext(ctx context.Context, network, addr string
 	if err != nil {
 		return nil, err
 	}
-	tlsConfig := &tls.Config{
-		ClientSessionCache: rt.clientSessionCache,
-		ServerName:         host,
-		InsecureSkipVerify: rt.insecureSkipVerify,
-		OmitEmptyPsk:       true,
-	}
-	conn := tls.UClient(rawConn, tlsConfig, tls.HelloCustom)
+	tlsConf := rt.tlsConf.Clone()
+	tlsConf.ServerName = host
+	tlsConf.ClientSessionCache = rt.clientSessionCache
+	tlsConf.OmitEmptyPsk = true
+	conn := tls.UClient(rawConn, tlsConf, tls.HelloCustom)
 	if err := conn.ApplyPreset(rt.profile.ClientHelloSpec()); err != nil {
 		conn.Close()
 		return nil, err
@@ -296,7 +314,8 @@ func (rt *RoundTripper) dialTLSContext(ctx context.Context, network, addr string
 		return nil, err
 	}
 
-	if err := rt.pinner.Pin(conn, host); err != nil {
+	state := conn.ConnectionState()
+	if err := rt.pinner.Pin(state.PeerCertificates, addr); err != nil {
 		conn.Close()
 		return nil, err
 	}
@@ -305,7 +324,6 @@ func (rt *RoundTripper) dialTLSContext(ctx context.Context, network, addr string
 		return conn, nil
 	}
 
-	state := conn.ConnectionState()
 	switch state.NegotiatedProtocol {
 	case http3.NextProtoH3:
 		rt.transports[addr] = rt.buildHttp3Transport()
@@ -320,27 +338,43 @@ func (rt *RoundTripper) dialTLSContext(ctx context.Context, network, addr string
 	return nil, nil
 }
 
-func (rt *RoundTripper) dialTLSContextHTTP2(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
-	return rt.dialTLSContext(ctx, network, addr)
-}
-
 func (rt *RoundTripper) dialQuic(ctx context.Context, addr string, tlscfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
 	udpaddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
 	}
-	udpConn, err := net.ListenUDP("udp", nil)
+
+	network := "udp"
+	if rt.disableIPV6 {
+		network = "udp4"
+	}
+	if rt.disableIPV4 {
+		network = "udp6"
+	}
+
+	pconn, err := rt.dialer.ListenPacket(ctx, network, udpaddr.String())
 	if err != nil {
 		return nil, err
 	}
-	trackedUdpConn := bandwidth.NewTrackedUDPConn(udpConn, rt.tracker)
-	transport := &quic.Transport{
-		Conn: trackedUdpConn,
-	}
-	conn, err := transport.DialEarly(ctx, udpaddr, tlscfg, cfg)
+	trackedPconn, err := bandwidth.NewTrackedPacketConn(pconn, rt.tracker)
 	if err != nil {
-		udpConn.Close()
+		pconn.Close()
 		return nil, err
 	}
+
+	cfg = cfg.Clone()
+	cfg.DisablePathMTUDiscovery = true
+	conn, err := quic.DialEarly(ctx, trackedPconn, udpaddr, tlscfg, cfg)
+	if err != nil {
+		pconn.Close()
+		return nil, err
+	}
+
+	state := conn.ConnectionState()
+	if err := rt.pinner.Pin(state.TLS.PeerCertificates, addr); err != nil {
+		pconn.Close()
+		return nil, err
+	}
+
 	return conn, nil
 }

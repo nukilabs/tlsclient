@@ -421,9 +421,9 @@ var Chrome133 = ClientProfile{
 					tls.CertCompressionBrotli,
 				}},
 				&tls.ApplicationSettingsExtensionNew{
-					SupportedProtocols: []string{"h3", "h2"},
+					SupportedProtocols: []string{"h2"},
 				},
-				&tls.ALPNExtension{AlpnProtocols: []string{"h3", "h2", "http/1.1"}},
+				&tls.ALPNExtension{AlpnProtocols: []string{"h2", "http/1.1"}},
 				&tls.StatusRequestExtension{},
 				&tls.SupportedVersionsExtension{Versions: []uint16{
 					tls.GREASE_PLACEHOLDER,
@@ -443,18 +443,20 @@ var Chrome133 = ClientProfile{
 		{ID: http2.SettingInitialWindowSize, Val: 6291456},
 		{ID: http2.SettingMaxHeaderListSize, Val: 262144},
 	},
-	H3Settings: []http3.Setting{
-		{ID: http3.SettingQpackMaxTableCapacity, Val: 65536},
-		{ID: http3.SettingMaxFieldSectionSize, Val: 262144},
-		{ID: http3.SettingQpackBlockedStreams, Val: 100},
-		{ID: http3.SettingH3Datagram, Val: 1},
-		{ID: http3.SettingGrease, Val: 0},
-	},
 	ConnectionFlow: 15663105,
 	HeaderPriority: http2.PriorityParam{
 		StreamDep: 0,
 		Exclusive: true,
 		Weight:    255,
+	},
+	H3: &H3ClientProfile{
+		Settings: []http3.Setting{
+			{ID: http3.SettingQpackMaxTableCapacity, Val: 65536},
+			{ID: http3.SettingMaxFieldSectionSize, Val: 262144},
+			{ID: http3.SettingQpackBlockedStreams, Val: 100},
+			{ID: http3.SettingH3Datagram, Val: 1},
+			{ID: http3.SettingGrease, Val: 0},
+		},
 	},
 	PseudoHeaderOrder: []string{
 		":method",
