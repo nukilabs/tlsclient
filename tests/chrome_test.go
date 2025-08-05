@@ -10,7 +10,6 @@ import (
 
 func TestChrome131(t *testing.T) {
 	c := tlsclient.New(profiles.Chrome131)
-	c.Get("https://tls.peet.ws/api/clean")
 	res, err := c.Get("https://tls.peet.ws/api/clean")
 	if err != nil {
 		t.Fatal(err)
