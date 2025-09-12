@@ -88,12 +88,12 @@ func (c *Client) applyProxy() error {
 	return nil
 }
 
-func (c *Client) AddHooks(hooks ...HookFunc) {
-	c.hooks = append(c.hooks, hooks...)
+func (c *Client) SetHooks(hooks ...HookFunc) {
+	c.hooks = hooks
 }
 
-func (c *Client) RemoveHooks() {
-	c.hooks = nil
+func (c *Client) AddHooks(hooks ...HookFunc) {
+	c.hooks = append(c.hooks, hooks...)
 }
 
 func (c *Client) SetCookieJar(jar http.CookieJar) {
