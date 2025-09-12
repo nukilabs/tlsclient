@@ -9,7 +9,7 @@ import (
 )
 
 func Chrome(req *http.Request, via []*http.Request) error {
-	req.Header[http.HeaderOrderKey] = []string{"cache-control", "upgrade-insecure-requests", "user-agent", "accept", "x-browser-channel", "x-browser-year", "x-browser-validation", "x-browser-copyright", "x-chrome-id-consistency-request", "x-client-data", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-user", "sec-fetch-dest", "sec-ch-device-memory", "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-full-version", "sec-ch-ua-arch", "sec-ch-ua-platform", "sec-ch-ua-platform-version", "sec-ch-ua-model", "sec-ch-ua-bitness", "sec-ch-ua-wow64", "sec-ch-ua-full-version-list", "sec-ch-ua-form-factors", "referer", "accept-encoding", "accept-language", "cookie", "priority"}
+	req.Header[http.HeaderOrderKey] = []string{"host", "connection", "cache-control", "upgrade-insecure-requests", "user-agent", "accept", "x-browser-channel", "x-browser-year", "x-browser-validation", "x-browser-copyright", "x-chrome-id-consistency-request", "x-client-data", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-user", "sec-fetch-dest", "sec-ch-device-memory", "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-full-version", "sec-ch-ua-arch", "sec-ch-ua-platform", "sec-ch-ua-platform-version", "sec-ch-ua-model", "sec-ch-ua-bitness", "sec-ch-ua-wow64", "sec-ch-ua-full-version-list", "sec-ch-ua-form-factors", "referer", "accept-encoding", "accept-language", "cookie", "priority"}
 	for key := range req.Header {
 		if key == http.HeaderOrderKey {
 			continue
