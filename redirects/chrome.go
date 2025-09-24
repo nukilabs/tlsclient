@@ -58,6 +58,7 @@ func Chrome(req *http.Request, via []*http.Request) error {
 			ref := &url.URL{
 				Scheme: src.Scheme,
 				Host:   src.Host,
+				Path:   "/",
 			}
 			req.Header[key] = []string{ref.String()}
 		}
