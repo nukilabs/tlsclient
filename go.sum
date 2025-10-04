@@ -10,6 +10,8 @@ github.com/klauspost/compress v1.18.0 h1:c/Cqfb0r+Yi+JtIEq73FWXVkRonBlf0CRNYc8Zt
 github.com/klauspost/compress v1.18.0/go.mod h1:2Pp+KzxcywXVXMr50+X0Q/Lsb43OQHYWRCY2AiWywWQ=
 github.com/nukilabs/http v1.1.1 h1:sf95uTzpN4KIww7FufPqctJaJIlojl2GX0hXJH/Y3D8=
 github.com/nukilabs/http v1.1.1/go.mod h1:+fa1/G/mtq2r5NubXP0/nD/5FZwEjnMdz06zfxP+S98=
+github.com/nukilabs/http v1.1.2 h1:fbosMuI04uMOYFTW99Vg3cRNbpAbgWz9BfABwZq5fTU=
+github.com/nukilabs/http v1.1.2/go.mod h1:+fa1/G/mtq2r5NubXP0/nD/5FZwEjnMdz06zfxP+S98=
 github.com/nukilabs/masque-go v1.0.0 h1:6bcoErtHkHZRVppkCcxiDSbYMjesVavb6C0IAUZLL4Q=
 github.com/nukilabs/masque-go v1.0.0/go.mod h1:YH5jQGVb0M/C0HYSjM70Pz9RFmSmZ9wUWFSkJg3qZcw=
 github.com/nukilabs/quic-go v1.0.8 h1:nAEFLHOZZoz7P8r5Ct9QDWFgqg8j5omskjU7fHkLXcY=
