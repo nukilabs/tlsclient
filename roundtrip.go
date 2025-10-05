@@ -238,6 +238,7 @@ func (rt *RoundTripper) buildHttp2Transport() http.RoundTripper {
 		MaxHeaderListSize:            rt.maxHeaderListSize,
 		MaxDecoderHeaderTableSize:    rt.maxHeaderTableSize,
 		IdleConnTimeout:              rt.idleConnTimeout,
+		ReadIdleTimeout:              10 * time.Second,
 	}
 }
 
