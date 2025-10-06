@@ -88,16 +88,18 @@ var Safari17 = ClientProfile{
 			},
 		}
 	},
-	Settings: []http2.Setting{
-		{ID: http2.SettingEnablePush, Val: 0},
-		{ID: http2.SettingInitialWindowSize, Val: 4194304},
-		{ID: http2.SettingMaxConcurrentStreams, Val: 100},
-	},
-	ConnectionFlow: 10485760,
-	HeaderPriority: http2.PriorityParam{
-		StreamDep: 0,
-		Exclusive: false,
-		Weight:    255,
+	H2: &H2ClientProfile{
+		Settings: []http2.Setting{
+			{ID: http2.SettingEnablePush, Val: 0},
+			{ID: http2.SettingInitialWindowSize, Val: 4194304},
+			{ID: http2.SettingMaxConcurrentStreams, Val: 100},
+		},
+		ConnectionFlow: 10485760,
+		HeaderPriority: http2.PriorityParam{
+			StreamDep: 0,
+			Exclusive: false,
+			Weight:    255,
+		},
 	},
 	PseudoHeaderOrder: []string{
 		":method",
@@ -188,17 +190,19 @@ var Safari18 = ClientProfile{
 			},
 		}
 	},
-	Settings: []http2.Setting{
-		{ID: http2.SettingEnablePush, Val: 0},
-		{ID: http2.SettingMaxConcurrentStreams, Val: 100},
-		{ID: http2.SettingInitialWindowSize, Val: 2097152},
-		{ID: http2.SettingNoRFC7540Priorities, Val: 1},
-	},
-	ConnectionFlow: 10420225,
-	HeaderPriority: http2.PriorityParam{
-		StreamDep: 0,
-		Exclusive: false,
-		Weight:    255,
+	H2: &H2ClientProfile{
+		Settings: []http2.Setting{
+			{ID: http2.SettingEnablePush, Val: 0},
+			{ID: http2.SettingMaxConcurrentStreams, Val: 100},
+			{ID: http2.SettingInitialWindowSize, Val: 2097152},
+			{ID: http2.SettingNoRFC7540Priorities, Val: 1},
+		},
+		ConnectionFlow: 10420225,
+		HeaderPriority: http2.PriorityParam{
+			StreamDep: 0,
+			Exclusive: false,
+			Weight:    255,
+		},
 	},
 	H3: &H3ClientProfile{
 		Settings: []http3.Setting{

@@ -115,10 +115,12 @@ var Okhttp4Android21 = ClientProfile{
 			},
 		}
 	},
-	Settings: []http2.Setting{
-		{ID: http2.SettingInitialWindowSize, Val: 16777216},
+	H2: &H2ClientProfile{
+		Settings: []http2.Setting{
+			{ID: http2.SettingInitialWindowSize, Val: 16777216},
+		},
+		ConnectionFlow: 16711681,
 	},
-	ConnectionFlow: 16711681,
 	PseudoHeaderOrder: []string{
 		":method",
 		":path",
@@ -176,10 +178,12 @@ var Okhttp4Android23 = ClientProfile{
 			},
 		}
 	},
-	Settings: []http2.Setting{
-		{ID: http2.SettingInitialWindowSize, Val: 16777216},
+	H2: &H2ClientProfile{
+		Settings: []http2.Setting{
+			{ID: http2.SettingInitialWindowSize, Val: 16777216},
+		},
+		ConnectionFlow: 16711681,
 	},
-	ConnectionFlow: 16711681,
 	PseudoHeaderOrder: []string{
 		":method",
 		":path",
@@ -235,10 +239,12 @@ var Okhttp4Android24 = ClientProfile{
 			},
 		}
 	},
-	Settings: []http2.Setting{
-		{ID: http2.SettingInitialWindowSize, Val: 16777216},
+	H2: &H2ClientProfile{
+		Settings: []http2.Setting{
+			{ID: http2.SettingInitialWindowSize, Val: 16777216},
+		},
+		ConnectionFlow: 16711681,
 	},
-	ConnectionFlow: 16711681,
 	PseudoHeaderOrder: []string{
 		":method",
 		":path",
@@ -296,10 +302,12 @@ var Okhttp4Android25 = ClientProfile{
 			},
 		}
 	},
-	Settings: []http2.Setting{
-		{ID: http2.SettingInitialWindowSize, Val: 16777216},
+	H2: &H2ClientProfile{
+		Settings: []http2.Setting{
+			{ID: http2.SettingInitialWindowSize, Val: 16777216},
+		},
+		ConnectionFlow: 16711681,
 	},
-	ConnectionFlow: 16711681,
 	PseudoHeaderOrder: []string{
 		":method",
 		":path",
@@ -355,10 +363,12 @@ var Okhttp4Android26 = ClientProfile{
 			},
 		}
 	},
-	Settings: []http2.Setting{
-		{ID: http2.SettingInitialWindowSize, Val: 16777216},
+	H2: &H2ClientProfile{
+		Settings: []http2.Setting{
+			{ID: http2.SettingInitialWindowSize, Val: 16777216},
+		},
+		ConnectionFlow: 16711681,
 	},
-	ConnectionFlow: 16711681,
 	PseudoHeaderOrder: []string{
 		":method",
 		":path",
@@ -414,10 +424,12 @@ var Okhttp4Android27 = ClientProfile{
 			},
 		}
 	},
-	Settings: []http2.Setting{
-		{ID: http2.SettingInitialWindowSize, Val: 16777216},
+	H2: &H2ClientProfile{
+		Settings: []http2.Setting{
+			{ID: http2.SettingInitialWindowSize, Val: 16777216},
+		},
+		ConnectionFlow: 16711681,
 	},
-	ConnectionFlow: 16711681,
 	PseudoHeaderOrder: []string{
 		":method",
 		":path",
@@ -475,10 +487,12 @@ var Okhttp4Android28 = ClientProfile{
 			},
 		}
 	},
-	Settings: []http2.Setting{
-		{ID: http2.SettingInitialWindowSize, Val: 16777216},
+	H2: &H2ClientProfile{
+		Settings: []http2.Setting{
+			{ID: http2.SettingInitialWindowSize, Val: 16777216},
+		},
+		ConnectionFlow: 16711681,
 	},
-	ConnectionFlow: 16711681,
 	PseudoHeaderOrder: []string{
 		":method",
 		":path",
@@ -550,10 +564,12 @@ var Okhttp4Android29 = ClientProfile{
 			},
 		}
 	},
-	Settings: []http2.Setting{
-		{ID: http2.SettingInitialWindowSize, Val: 16777216},
+	H2: &H2ClientProfile{
+		Settings: []http2.Setting{
+			{ID: http2.SettingInitialWindowSize, Val: 16777216},
+		},
+		ConnectionFlow: 16711681,
 	},
-	ConnectionFlow: 16711681,
 	PseudoHeaderOrder: []string{
 		":method",
 		":path",

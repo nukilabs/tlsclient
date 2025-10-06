@@ -5,7 +5,7 @@ go 1.25
 require (
 	github.com/andybalholm/brotli v1.2.0
 	github.com/klauspost/compress v1.18.0
-	github.com/nukilabs/http v1.1.3
+	github.com/nukilabs/http v1.1.5
 	github.com/nukilabs/masque-go v1.0.0
 	github.com/nukilabs/quic-go v1.0.8
 	github.com/nukilabs/socks v1.0.0

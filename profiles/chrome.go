@@ -1,6 +1,8 @@
 package profiles
 
 import (
+	"time"
+
 	"github.com/nukilabs/http/http2"
 	"github.com/nukilabs/quic-go/http3"
 	tls "github.com/nukilabs/utls"
@@ -131,17 +133,19 @@ var Chrome120 = ClientProfile{
 			}),
 		}
 	},
-	Settings: []http2.Setting{
-		{ID: http2.SettingHeaderTableSize, Val: 65536},
-		{ID: http2.SettingEnablePush, Val: 0},
-		{ID: http2.SettingInitialWindowSize, Val: 6291456},
-		{ID: http2.SettingMaxHeaderListSize, Val: 262144},
-	},
-	ConnectionFlow: 15663105,
-	HeaderPriority: http2.PriorityParam{
-		StreamDep: 0,
-		Exclusive: true,
-		Weight:    255,
+	H2: &H2ClientProfile{
+		Settings: []http2.Setting{
+			{ID: http2.SettingHeaderTableSize, Val: 65536},
+			{ID: http2.SettingEnablePush, Val: 0},
+			{ID: http2.SettingInitialWindowSize, Val: 6291456},
+			{ID: http2.SettingMaxHeaderListSize, Val: 262144},
+		},
+		ConnectionFlow: 15663105,
+		HeaderPriority: http2.PriorityParam{
+			StreamDep: 0,
+			Exclusive: true,
+			Weight:    255,
+		},
 	},
 	PseudoHeaderOrder: []string{
 		":method",
@@ -235,17 +239,19 @@ var Chrome124 = ClientProfile{
 			}),
 		}
 	},
-	Settings: []http2.Setting{
-		{ID: http2.SettingHeaderTableSize, Val: 65536},
-		{ID: http2.SettingEnablePush, Val: 0},
-		{ID: http2.SettingInitialWindowSize, Val: 6291456},
-		{ID: http2.SettingMaxHeaderListSize, Val: 262144},
-	},
-	ConnectionFlow: 15663105,
-	HeaderPriority: http2.PriorityParam{
-		StreamDep: 0,
-		Exclusive: true,
-		Weight:    255,
+	H2: &H2ClientProfile{
+		Settings: []http2.Setting{
+			{ID: http2.SettingHeaderTableSize, Val: 65536},
+			{ID: http2.SettingEnablePush, Val: 0},
+			{ID: http2.SettingInitialWindowSize, Val: 6291456},
+			{ID: http2.SettingMaxHeaderListSize, Val: 262144},
+		},
+		ConnectionFlow: 15663105,
+		HeaderPriority: http2.PriorityParam{
+			StreamDep: 0,
+			Exclusive: true,
+			Weight:    255,
+		},
 	},
 	PseudoHeaderOrder: []string{
 		":method",
@@ -343,17 +349,19 @@ var Chrome131 = ClientProfile{
 			}),
 		}
 	},
-	Settings: []http2.Setting{
-		{ID: http2.SettingHeaderTableSize, Val: 65536},
-		{ID: http2.SettingEnablePush, Val: 0},
-		{ID: http2.SettingInitialWindowSize, Val: 6291456},
-		{ID: http2.SettingMaxHeaderListSize, Val: 262144},
-	},
-	ConnectionFlow: 15663105,
-	HeaderPriority: http2.PriorityParam{
-		StreamDep: 0,
-		Exclusive: true,
-		Weight:    255,
+	H2: &H2ClientProfile{
+		Settings: []http2.Setting{
+			{ID: http2.SettingHeaderTableSize, Val: 65536},
+			{ID: http2.SettingEnablePush, Val: 0},
+			{ID: http2.SettingInitialWindowSize, Val: 6291456},
+			{ID: http2.SettingMaxHeaderListSize, Val: 262144},
+		},
+		ConnectionFlow: 15663105,
+		HeaderPriority: http2.PriorityParam{
+			StreamDep: 0,
+			Exclusive: true,
+			Weight:    255,
+		},
 	},
 	PseudoHeaderOrder: []string{
 		":method",
@@ -441,17 +449,22 @@ var Chrome133 = ClientProfile{
 			}),
 		}
 	},
-	Settings: []http2.Setting{
-		{ID: http2.SettingHeaderTableSize, Val: 65536},
-		{ID: http2.SettingEnablePush, Val: 0},
-		{ID: http2.SettingInitialWindowSize, Val: 6291456},
-		{ID: http2.SettingMaxHeaderListSize, Val: 262144},
-	},
-	ConnectionFlow: 15663105,
-	HeaderPriority: http2.PriorityParam{
-		StreamDep: 0,
-		Exclusive: true,
-		Weight:    255,
+	H2: &H2ClientProfile{
+		Settings: []http2.Setting{
+			{ID: http2.SettingHeaderTableSize, Val: 65536},
+			{ID: http2.SettingEnablePush, Val: 0},
+			{ID: http2.SettingInitialWindowSize, Val: 6291456},
+			{ID: http2.SettingMaxHeaderListSize, Val: 262144},
+		},
+		ConnectionFlow: 15663105,
+		HeaderPriority: http2.PriorityParam{
+			StreamDep: 0,
+			Exclusive: true,
+			Weight:    255,
+		},
+		InflowTimeout:   5 * time.Second,
+		ReadIdleTimeout: 10 * time.Second,
+		PrefacePing:     true,
 	},
 	H3: &H3ClientProfile{
 		Settings: []http3.Setting{

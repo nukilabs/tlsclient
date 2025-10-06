@@ -66,21 +66,29 @@ func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer,
 		disableHTTP3 = opts.DisableHTTP3
 	}
 	var maxHeaderTableSize, maxReadFrameSize, maxHeaderListSize uint32
-	if idx := slices.IndexFunc(profile.Settings, func(s http2.Setting) bool {
-		return s.ID == http2.SettingHeaderTableSize
-	}); idx != -1 {
-		maxHeaderListSize = profile.Settings[idx].Val
+	if profile.H2 != nil {
+		if idx := slices.IndexFunc(profile.H2.Settings, func(s http2.Setting) bool {
+			return s.ID == http2.SettingHeaderTableSize
+		}); idx != -1 {
+			maxHeaderListSize = profile.H2.Settings[idx].Val
+		}
+		if idx := slices.IndexFunc(profile.H2.Settings, func(s http2.Setting) bool {
+			return s.ID == http2.SettingMaxFrameSize
+		}); idx != -1 {
+			maxReadFrameSize = profile.H2.Settings[idx].Val
+		}
+		if idx := slices.IndexFunc(profile.H2.Settings, func(s http2.Setting) bool {
+			return s.ID == http2.SettingMaxHeaderListSize
+		}); idx != -1 {
+			maxHeaderTableSize = profile.H2.Settings[idx].Val
+		}
 	}
-	if idx := slices.IndexFunc(profile.Settings, func(s http2.Setting) bool {
-		return s.ID == http2.SettingMaxFrameSize
-	}); idx != -1 {
-		maxReadFrameSize = profile.Settings[idx].Val
+
+	var maxUploadBufferPerConnection int32
+	if profile.H2 != nil {
+		maxUploadBufferPerConnection = int32(profile.H2.ConnectionFlow)
 	}
-	if idx := slices.IndexFunc(profile.Settings, func(s http2.Setting) bool {
-		return s.ID == http2.SettingMaxHeaderListSize
-	}); idx != -1 {
-		maxHeaderTableSize = profile.Settings[idx].Val
-	}
+
 	return &RoundTripper{
 		profile: profile,
 		dialer:  dialer,
@@ -97,7 +105,7 @@ func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer,
 		disableIPV6:        disableIPV6,
 		disableHTTP3:       disableHTTP3,
 
-		maxUploadBufferPerConnection: int32(profile.ConnectionFlow),
+		maxUploadBufferPerConnection: maxUploadBufferPerConnection,
 		maxReadFrameSize:             maxReadFrameSize,
 		maxHeaderListSize:            maxHeaderListSize,
 		maxHeaderTableSize:           maxHeaderTableSize,
@@ -230,15 +238,17 @@ func (rt *RoundTripper) buildHttp2Transport() http.RoundTripper {
 		DisableCompression:           true,
 		TLSClientConfig:              tlsConf,
 		MaxUploadBufferPerConnection: rt.maxUploadBufferPerConnection,
-		Settings:                     rt.profile.Settings,
-		Priorities:                   rt.profile.Priorities,
-		HeaderPriority:               rt.profile.HeaderPriority,
+		Settings:                     rt.profile.H2.Settings,
+		Priorities:                   rt.profile.H2.Priorities,
+		HeaderPriority:               rt.profile.H2.HeaderPriority,
 		PseudoHeaderOrder:            rt.profile.PseudoHeaderOrder,
 		MaxReadFrameSize:             rt.maxReadFrameSize,
 		MaxHeaderListSize:            rt.maxHeaderListSize,
 		MaxDecoderHeaderTableSize:    rt.maxHeaderTableSize,
 		IdleConnTimeout:              rt.idleConnTimeout,
-		ReadIdleTimeout:              10 * time.Second,
+		ReadIdleTimeout:              rt.profile.H2.ReadIdleTimeout,
+		InflowTimeout:                rt.profile.H2.InflowTimeout,
+		PrefacePing:                  rt.profile.H2.PrefacePing,
 	}
 }
 
