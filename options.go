@@ -42,6 +42,12 @@ func WithNoFollowRedirects() Option {
 	}
 }
 
+func WithPinner(pinner *Pinner) Option {
+	return func(c *Client) {
+		c.pinner = pinner
+	}
+}
+
 func WithTracker(tracker bandwidth.Tracker) Option {
 	return func(c *Client) {
 		c.tracker = tracker

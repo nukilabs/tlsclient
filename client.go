@@ -62,6 +62,30 @@ func New(profile profiles.ClientProfile, options ...Option) *Client {
 	return client
 }
 
+func (c *Client) Clone() *Client {
+	jar, _ := cookiejar.New(nil)
+
+	clone := &Client{
+		Client: http.Client{
+			Timeout:       c.Client.Timeout,
+			Jar:           jar,
+			CheckRedirect: c.Client.CheckRedirect,
+		},
+		profile:        c.profile,
+		pinner:         c.pinner,
+		tracker:        c.tracker,
+		redirect:       c.redirect,
+		tlsConf:        c.tlsConf.Clone(),
+		quicConf:       c.quicConf.Clone(),
+		opts:           c.opts,
+		AutoDecompress: c.AutoDecompress,
+	}
+
+	dialer := proxy.Direct(clone.Timeout)
+	clone.Transport = NewRoundTripper(clone.profile, dialer, clone.pinner, clone.tracker, clone.tlsConf, clone.quicConf, clone.opts)
+	return clone
+}
+
 func (c *Client) GetProxy() *url.URL {
 	return c.proxyURL
 }
