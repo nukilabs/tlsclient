@@ -12,10 +12,11 @@ type direct struct {
 	listener net.ListenConfig
 }
 
-func Direct(timeout time.Duration) *direct {
+func Direct(addr net.Addr, timeout time.Duration) *direct {
 	return &direct{
 		dialer: net.Dialer{
-			Timeout: timeout,
+			Timeout:   timeout,
+			LocalAddr: addr,
 		},
 	}
 }

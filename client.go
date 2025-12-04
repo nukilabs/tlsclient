@@ -2,6 +2,7 @@ package tlsclient
 
 import (
 	"io"
+	"net"
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -18,16 +19,17 @@ import (
 
 type Client struct {
 	http.Client
-	profile  profiles.ClientProfile
-	pinner   *Pinner
-	tracker  bandwidth.Tracker
-	proxyURL *url.URL
-	hooks    []HookFunc
-	inHook   atomic.Bool
-	redirect func(req *http.Request, via []*http.Request) error
-	tlsConf  *tls.Config
-	quicConf *quic.Config
-	opts     *TransportOptions
+	profile   profiles.ClientProfile
+	pinner    *Pinner
+	tracker   bandwidth.Tracker
+	proxyURL  *url.URL
+	localAddr net.Addr
+	hooks     []HookFunc
+	inHook    atomic.Bool
+	redirect  func(req *http.Request, via []*http.Request) error
+	tlsConf   *tls.Config
+	quicConf  *quic.Config
+	opts      *TransportOptions
 
 	AutoDecompress bool
 }
@@ -57,7 +59,7 @@ func New(profile profiles.ClientProfile, options ...Option) *Client {
 	if client.pinner == nil {
 		client.pinner = NewPinner(false)
 	}
-	dialer := proxy.Direct(client.Timeout)
+	dialer := proxy.Direct(nil, client.Timeout)
 	client.Transport = NewRoundTripper(profile, dialer, client.pinner, client.tracker, client.tlsConf, client.quicConf, client.opts)
 	return client
 }
@@ -81,7 +83,7 @@ func (c *Client) Clone() *Client {
 		AutoDecompress: c.AutoDecompress,
 	}
 
-	dialer := proxy.Direct(clone.Timeout)
+	dialer := proxy.Direct(nil, clone.Timeout)
 	clone.Transport = NewRoundTripper(clone.profile, dialer, clone.pinner, clone.tracker, clone.tlsConf, clone.quicConf, clone.opts)
 	return clone
 }
@@ -90,24 +92,28 @@ func (c *Client) GetProxy() *url.URL {
 	return c.proxyURL
 }
 
-func (c *Client) SetProxy(proxyUrl *url.URL) error {
-	oldProxy := c.proxyURL
-	c.proxyURL = proxyUrl
-	if err := c.applyProxy(); err != nil {
-		c.proxyURL = oldProxy
-		if err := c.applyProxy(); err != nil {
-			c.proxyURL = nil
-			return c.applyProxy()
-		}
-	}
-	return nil
-}
-
-func (c *Client) applyProxy() error {
-	dialer, err := proxy.New(c.proxyURL, c.Timeout, c.tlsConf)
+func (c *Client) SetProxy(proxyURL *url.URL) error {
+	dialer, err := proxy.New(proxyURL, nil, c.Timeout, c.tlsConf)
 	if err != nil {
 		return err
 	}
+	c.proxyURL = proxyURL
+	c.localAddr = nil
+	c.Transport = NewRoundTripper(c.profile, dialer, c.pinner, c.tracker, c.tlsConf, c.quicConf, c.opts)
+	return nil
+}
+
+func (c *Client) GetLocalAddr() net.Addr {
+	return c.localAddr
+}
+
+func (c *Client) SetLocalAddr(addr net.Addr) error {
+	dialer, err := proxy.New(nil, addr, c.Timeout, c.tlsConf)
+	if err != nil {
+		return err
+	}
+	c.proxyURL = nil
+	c.localAddr = addr
 	c.Transport = NewRoundTripper(c.profile, dialer, c.pinner, c.tracker, c.tlsConf, c.quicConf, c.opts)
 	return nil
 }

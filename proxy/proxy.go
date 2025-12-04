@@ -19,9 +19,9 @@ type ContextDialer interface {
 	SupportHTTP3() bool
 }
 
-func New(proxyURL *url.URL, timeout time.Duration, tlsConf *tls.Config) (ContextDialer, error) {
+func New(proxyURL *url.URL, addr net.Addr, timeout time.Duration, tlsConf *tls.Config) (ContextDialer, error) {
 	if proxyURL == nil {
-		return Direct(timeout), nil
+		return Direct(addr, timeout), nil
 	}
 
 	switch proxyURL.Scheme {
