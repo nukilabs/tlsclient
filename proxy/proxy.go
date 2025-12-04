@@ -19,12 +19,18 @@ type ContextDialer interface {
 	SupportHTTP3() bool
 }
 
-func New(proxyURL *url.URL, addr net.Addr, timeout time.Duration, tlsConf *tls.Config) (ContextDialer, error) {
+func New(proxyURL *url.URL, timeout time.Duration, tlsConf *tls.Config) (ContextDialer, error) {
 	if proxyURL == nil {
-		return Direct(addr, timeout), nil
+		return Direct(nil, timeout), nil
 	}
 
 	switch proxyURL.Scheme {
+	case "":
+		ip := net.ParseIP(proxyURL.Host)
+		if ip == nil {
+			return nil, errors.New("invalid ip address for direct connection: " + proxyURL.Host)
+		}
+		return Direct(&net.TCPAddr{IP: ip}, timeout), nil
 	case "socks5", "socks5h":
 		return socks.NewDialer(proxyURL)
 	case "http", "https":

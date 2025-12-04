@@ -2,7 +2,6 @@ package tlsclient
 
 import (
 	"io"
-	"net"
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -19,17 +18,16 @@ import (
 
 type Client struct {
 	http.Client
-	profile   profiles.ClientProfile
-	pinner    *Pinner
-	tracker   bandwidth.Tracker
-	proxyURL  *url.URL
-	localAddr net.Addr
-	hooks     []HookFunc
-	inHook    atomic.Bool
-	redirect  func(req *http.Request, via []*http.Request) error
-	tlsConf   *tls.Config
-	quicConf  *quic.Config
-	opts      *TransportOptions
+	profile  profiles.ClientProfile
+	pinner   *Pinner
+	tracker  bandwidth.Tracker
+	proxyURL *url.URL
+	hooks    []HookFunc
+	inHook   atomic.Bool
+	redirect func(req *http.Request, via []*http.Request) error
+	tlsConf  *tls.Config
+	quicConf *quic.Config
+	opts     *TransportOptions
 
 	AutoDecompress bool
 }
@@ -93,27 +91,11 @@ func (c *Client) GetProxy() *url.URL {
 }
 
 func (c *Client) SetProxy(proxyURL *url.URL) error {
-	dialer, err := proxy.New(proxyURL, nil, c.Timeout, c.tlsConf)
+	dialer, err := proxy.New(proxyURL, c.Timeout, c.tlsConf)
 	if err != nil {
 		return err
 	}
 	c.proxyURL = proxyURL
-	c.localAddr = nil
-	c.Transport = NewRoundTripper(c.profile, dialer, c.pinner, c.tracker, c.tlsConf, c.quicConf, c.opts)
-	return nil
-}
-
-func (c *Client) GetLocalAddr() net.Addr {
-	return c.localAddr
-}
-
-func (c *Client) SetLocalAddr(addr net.Addr) error {
-	dialer, err := proxy.New(nil, addr, c.Timeout, c.tlsConf)
-	if err != nil {
-		return err
-	}
-	c.proxyURL = nil
-	c.localAddr = addr
 	c.Transport = NewRoundTripper(c.profile, dialer, c.pinner, c.tracker, c.tlsConf, c.quicConf, c.opts)
 	return nil
 }
