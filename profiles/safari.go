@@ -1,6 +1,7 @@
 package profiles
 
 import (
+	"github.com/nukilabs/http"
 	"github.com/nukilabs/http/http2"
 	"github.com/nukilabs/quic-go/http3"
 	tls "github.com/nukilabs/utls"
@@ -95,10 +96,12 @@ var Safari17 = ClientProfile{
 			{ID: http2.SettingMaxConcurrentStreams, Val: 100},
 		},
 		ConnectionFlow: 10485760,
-		HeaderPriority: http2.PriorityParam{
-			StreamDep: 0,
-			Exclusive: false,
-			Weight:    255,
+		HeaderPriority: func(r *http.Request) http2.PriorityParam {
+			return http2.PriorityParam{
+				StreamDep: 0,
+				Exclusive: true,
+				Weight:    255,
+			}
 		},
 	},
 	PseudoHeaderOrder: []string{
@@ -198,10 +201,12 @@ var Safari18 = ClientProfile{
 			{ID: http2.SettingNoRFC7540Priorities, Val: 1},
 		},
 		ConnectionFlow: 10420225,
-		HeaderPriority: http2.PriorityParam{
-			StreamDep: 0,
-			Exclusive: false,
-			Weight:    255,
+		HeaderPriority: func(r *http.Request) http2.PriorityParam {
+			return http2.PriorityParam{
+				StreamDep: 0,
+				Exclusive: true,
+				Weight:    255,
+			}
 		},
 	},
 	H3: &H3ClientProfile{

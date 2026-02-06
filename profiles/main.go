@@ -3,6 +3,7 @@ package profiles
 import (
 	"time"
 
+	"github.com/nukilabs/http"
 	"github.com/nukilabs/http/http2"
 	"github.com/nukilabs/quic-go/http3"
 	tls "github.com/nukilabs/utls"
@@ -19,7 +20,7 @@ type H2ClientProfile struct {
 	Settings        []http2.Setting
 	ConnectionFlow  uint32
 	Priorities      []http2.Priority
-	HeaderPriority  http2.PriorityParam
+	HeaderPriority  func(*http.Request) http2.PriorityParam
 	InflowTimeout   time.Duration
 	ReadIdleTimeout time.Duration
 	PrefacePing     bool

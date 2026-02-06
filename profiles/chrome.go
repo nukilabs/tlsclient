@@ -3,10 +3,32 @@ package profiles
 import (
 	"time"
 
+	"github.com/nukilabs/http"
 	"github.com/nukilabs/http/http2"
 	"github.com/nukilabs/quic-go/http3"
 	tls "github.com/nukilabs/utls"
 )
+
+func chromeweight(p http.Priority) uint8 {
+	switch p {
+	case http.PriorityHighest:
+		return 255
+	case http.PriorityHigh:
+		return 219
+	case http.PriorityMedium:
+		return 183
+	case http.PriorityLow:
+		return 146
+	case http.PriorityLowest:
+		return 109
+	case http.PriorityIdle:
+		return 73
+	case http.PriorityThrottled:
+		return 36
+	default:
+		return 219
+	}
+}
 
 func Chrome(major int) ClientProfile {
 	switch major {
@@ -149,10 +171,12 @@ var Chrome120 = ClientProfile{
 			{ID: http2.SettingMaxHeaderListSize, Val: 262144},
 		},
 		ConnectionFlow: 15663105,
-		HeaderPriority: http2.PriorityParam{
-			StreamDep: 0,
-			Exclusive: true,
-			Weight:    255,
+		HeaderPriority: func(r *http.Request) http2.PriorityParam {
+			return http2.PriorityParam{
+				StreamDep: 0,
+				Exclusive: true,
+				Weight:    chromeweight(r.Priority),
+			}
 		},
 	},
 	PseudoHeaderOrder: []string{
@@ -255,10 +279,12 @@ var Chrome124 = ClientProfile{
 			{ID: http2.SettingMaxHeaderListSize, Val: 262144},
 		},
 		ConnectionFlow: 15663105,
-		HeaderPriority: http2.PriorityParam{
-			StreamDep: 0,
-			Exclusive: true,
-			Weight:    255,
+		HeaderPriority: func(r *http.Request) http2.PriorityParam {
+			return http2.PriorityParam{
+				StreamDep: 0,
+				Exclusive: true,
+				Weight:    chromeweight(r.Priority),
+			}
 		},
 	},
 	PseudoHeaderOrder: []string{
@@ -365,10 +391,12 @@ var Chrome131 = ClientProfile{
 			{ID: http2.SettingMaxHeaderListSize, Val: 262144},
 		},
 		ConnectionFlow: 15663105,
-		HeaderPriority: http2.PriorityParam{
-			StreamDep: 0,
-			Exclusive: true,
-			Weight:    255,
+		HeaderPriority: func(r *http.Request) http2.PriorityParam {
+			return http2.PriorityParam{
+				StreamDep: 0,
+				Exclusive: true,
+				Weight:    chromeweight(r.Priority),
+			}
 		},
 	},
 	PseudoHeaderOrder: []string{
@@ -465,10 +493,12 @@ var Chrome133 = ClientProfile{
 			{ID: http2.SettingMaxHeaderListSize, Val: 262144},
 		},
 		ConnectionFlow: 15663105,
-		HeaderPriority: http2.PriorityParam{
-			StreamDep: 0,
-			Exclusive: true,
-			Weight:    255,
+		HeaderPriority: func(r *http.Request) http2.PriorityParam {
+			return http2.PriorityParam{
+				StreamDep: 0,
+				Exclusive: true,
+				Weight:    chromeweight(r.Priority),
+			}
 		},
 		InflowTimeout:   5 * time.Second,
 		ReadIdleTimeout: 10 * time.Second,
@@ -511,112 +541,4 @@ var Chrome142 = Chrome133
 
 var Chrome143 = Chrome133
 
-var Chrome144 = ClientProfile{
-	ClientHelloSpec: func() *tls.ClientHelloSpec {
-		return &tls.ClientHelloSpec{
-			CipherSuites: []uint16{
-				tls.GREASE_PLACEHOLDER,
-				tls.TLS_AES_128_GCM_SHA256,
-				tls.TLS_AES_256_GCM_SHA384,
-				tls.TLS_CHACHA20_POLY1305_SHA256,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-				tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-				tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-				tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_RSA_WITH_AES_128_CBC_SHA,
-				tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-			},
-			CompressionMethods: []byte{
-				0x00, // compressionNone
-			},
-			Extensions: tls.ShuffleChromeTLSExtensions([]tls.TLSExtension{
-				&tls.UtlsGREASEExtension{},
-				&tls.RenegotiationInfoExtension{Renegotiation: tls.RenegotiateNever},
-				&tls.PSKKeyExchangeModesExtension{Modes: []uint8{
-					tls.PskModeDHE,
-				}},
-				&tls.SessionTicketExtension{},
-				&tls.SupportedPointsExtension{SupportedPoints: []byte{0x00}},
-				&tls.SignatureAlgorithmsExtension{SupportedSignatureAlgorithms: []tls.SignatureScheme{
-					tls.ECDSAWithP256AndSHA256,
-					tls.PSSWithSHA256,
-					tls.PKCS1WithSHA256,
-					tls.ECDSAWithP384AndSHA384,
-					tls.PSSWithSHA384,
-					tls.PKCS1WithSHA384,
-					tls.PSSWithSHA512,
-					tls.PKCS1WithSHA512,
-				}},
-				&tls.SupportedCurvesExtension{Curves: []tls.CurveID{
-					tls.CurveID(tls.GREASE_PLACEHOLDER),
-					tls.X25519MLKEM768,
-					tls.X25519,
-					tls.CurveP256,
-					tls.CurveP384,
-				}},
-				&tls.SNIExtension{},
-				tls.BoringGREASEECH(),
-				&tls.KeyShareExtension{KeyShares: []tls.KeyShare{
-					{Group: tls.CurveID(tls.GREASE_PLACEHOLDER), Data: []byte{0}},
-					{Group: tls.X25519MLKEM768},
-					{Group: tls.X25519},
-				}},
-				&tls.UtlsCompressCertExtension{Algorithms: []tls.CertCompressionAlgo{
-					tls.CertCompressionBrotli,
-				}},
-				&tls.ApplicationSettingsExtensionNew{
-					SupportedProtocols: []string{"h2"},
-				},
-				&tls.ALPNExtension{AlpnProtocols: []string{"h2", "http/1.1"}},
-				&tls.StatusRequestExtension{},
-				&tls.SupportedVersionsExtension{Versions: []uint16{
-					tls.GREASE_PLACEHOLDER,
-					tls.VersionTLS13,
-					tls.VersionTLS12,
-				}},
-				&tls.SCTExtension{},
-				&tls.ExtendedMasterSecretExtension{},
-				&tls.UtlsGREASEExtension{},
-				&tls.UtlsPreSharedKeyExtension{OmitEmptyPsk: true},
-			}),
-		}
-	},
-	H2: &H2ClientProfile{
-		Settings: []http2.Setting{
-			{ID: http2.SettingHeaderTableSize, Val: 65536},
-			{ID: http2.SettingEnablePush, Val: 0},
-			{ID: http2.SettingInitialWindowSize, Val: 6291456},
-			{ID: http2.SettingMaxHeaderListSize, Val: 262144},
-		},
-		ConnectionFlow: 15663105,
-		HeaderPriority: http2.PriorityParam{
-			StreamDep: 0,
-			Exclusive: true,
-			Weight:    219,
-		},
-		InflowTimeout:   5 * time.Second,
-		ReadIdleTimeout: 10 * time.Second,
-		PrefacePing:     true,
-	},
-	H3: &H3ClientProfile{
-		Settings: []http3.Setting{
-			{ID: http3.SettingQpackMaxTableCapacity, Val: 65536},
-			{ID: http3.SettingMaxFieldSectionSize, Val: 262144},
-			{ID: http3.SettingQpackBlockedStreams, Val: 100},
-			{ID: http3.SettingH3Datagram, Val: 1},
-			{ID: http3.SettingGrease, Val: 0},
-		},
-	},
-	PseudoHeaderOrder: []string{
-		":method",
-		":authority",
-		":scheme",
-		":path",
-	},
-}
+var Chrome144 = Chrome133
