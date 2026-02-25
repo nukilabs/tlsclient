@@ -9,7 +9,7 @@ A powerful Go HTTP client library that provides advanced TLS fingerprinting capa
 - 🌐 **Browser Emulation**: Mimic TLS fingerprints of Chrome, Safari, OkHttp4, and HttpUrlConnection
 - 🚀 **HTTP Protocol Support**: HTTP/1.1, HTTP/2, and HTTP/3
 - 🗜️ **Automatic Decompression**: Built-in support for gzip, brotli, zstd, and deflate
-- 🪝 **Hooks**: Injectable hooks that are performed after each request
+- 🪝 **Hooks**: Pre-request and post-request hooks for request/response manipulation
 - 🔄 **Smart Redirects**: Configurable redirect handling with custom policies
 - 📊 **Bandwidth Tracking**: Monitor network usage and performance
 - 🎯 **Certificate Pinning**: Enhanced security with certificate validation
@@ -208,20 +208,54 @@ client.SetProxy(&url.URL{
 })
 ```
 
-## Response Hooks
+## Hooks
+
+### Pre-Request Hooks
+
+Pre-hooks run before each request and can modify the request before it is sent.
 
 ```go
-func GotBlockedHook(client *tlsclient.Client, res *http.Response) (*http.Response, error) {
+func AddAuthHeader(client *tlsclient.Client, req *http.Request) (*http.Request, error) {
+    req.Header.Set("Authorization", "Bearer my-token")
+    return req, nil
+}
+
+client.AddPreHooks(AddAuthHeader)
+```
+
+### Post-Request Hooks
+
+Post-hooks run after each request and can inspect or modify the response.
+
+```go
+func GotBlockedHook(client *tlsclient.Client, req *http.Request, res *http.Response) (*http.Response, error) {
     if res.StatusCode == http.StatusTooManyRequests {
-        // Switch to a diffrent proxy if blocked
+        // Switch to a different proxy if blocked
         client.SetProxy(&url.URL{
             Scheme: "http",
             Host:   "localhost:8889",
         })
     }
+    return res, nil
 }
 
-client.AddHook(GotBlockedHook)
+client.AddPostHooks(GotBlockedHook)
+```
+
+### Managing Hooks
+
+```go
+// Set hooks (replaces any existing hooks)
+client.SetPreHooks(hook1, hook2)
+client.SetPostHooks(hook1, hook2)
+
+// Add hooks (appends to existing hooks)
+client.AddPreHooks(hook3)
+client.AddPostHooks(hook3)
+
+// Delete all hooks
+client.DeletePreHooks()
+client.DeletePostHooks()
 ```
 
 ## Best Practices

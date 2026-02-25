@@ -18,21 +18,23 @@ import (
 
 type Client struct {
 	http.Client
-	profile  profiles.ClientProfile
-	pinner   *Pinner
-	tracker  bandwidth.Tracker
-	proxyURL *url.URL
-	hooks    []HookFunc
-	inHook   atomic.Bool
-	redirect func(req *http.Request, via []*http.Request) error
-	tlsConf  *tls.Config
-	quicConf *quic.Config
-	opts     *TransportOptions
+	profile    profiles.ClientProfile
+	pinner     *Pinner
+	tracker    bandwidth.Tracker
+	proxyURL   *url.URL
+	preHooks   []PreHook
+	postHooks  []PostHook
+	inPostHook atomic.Bool
+	redirect   func(req *http.Request, via []*http.Request) error
+	tlsConf    *tls.Config
+	quicConf   *quic.Config
+	opts       *TransportOptions
 
 	AutoDecompress bool
 }
 
-type HookFunc func(*Client, *http.Response) (*http.Response, error)
+type PreHook func(*Client, *http.Request) (*http.Request, error)
+type PostHook func(*Client, *http.Request, *http.Response) (*http.Response, error)
 
 func New(profile profiles.ClientProfile, options ...Option) *Client {
 	jar, _ := cookiejar.New(nil)
@@ -100,12 +102,28 @@ func (c *Client) SetProxy(proxyURL *url.URL) error {
 	return nil
 }
 
-func (c *Client) SetHooks(hooks ...HookFunc) {
-	c.hooks = hooks
+func (c *Client) SetPreHooks(hooks ...PreHook) {
+	c.preHooks = hooks
 }
 
-func (c *Client) AddHooks(hooks ...HookFunc) {
-	c.hooks = append(c.hooks, hooks...)
+func (c *Client) AddPreHooks(hooks ...PreHook) {
+	c.preHooks = append(c.preHooks, hooks...)
+}
+
+func (c *Client) DeletePreHooks() {
+	c.preHooks = nil
+}
+
+func (c *Client) SetPostHooks(hooks ...PostHook) {
+	c.postHooks = hooks
+}
+
+func (c *Client) AddPostHooks(hooks ...PostHook) {
+	c.postHooks = append(c.postHooks, hooks...)
+}
+
+func (c *Client) DeletePostHooks() {
+	c.postHooks = nil
 }
 
 func (c *Client) SetCookieJar(jar http.CookieJar) {
@@ -144,10 +162,17 @@ func (c *Client) SetFollowRedirects(follow bool) {
 }
 
 func (c *Client) ResetInHook() {
-	c.inHook.Store(false)
+	c.inPostHook.Store(false)
 }
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	var err error
+	for _, hook := range c.preHooks {
+		req, err = hook(c, req)
+		if err != nil {
+			return nil, err
+		}
+	}
 	res, err := c.Client.Do(req)
 	if err != nil {
 		return nil, err
@@ -155,10 +180,10 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	if c.AutoDecompress {
 		DecompressBody(res)
 	}
-	for _, hook := range c.hooks {
-		if c.inHook.CompareAndSwap(false, true) {
-			res, err = hook(c, res)
-			c.inHook.Store(false)
+	for _, hook := range c.postHooks {
+		if c.inPostHook.CompareAndSwap(false, true) {
+			res, err = hook(c, req, res)
+			c.inPostHook.Store(false)
 			if err != nil {
 				return nil, err
 			}
