@@ -140,13 +140,17 @@ func (rt *RoundTripper) CloseIdleConnections() {
 }
 
 func (rt *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	var addr string
-	host, port, err := net.SplitHostPort(req.URL.Host)
-	if err != nil {
-		addr = net.JoinHostPort(req.URL.Host, "443")
-	} else {
-		addr = net.JoinHostPort(host, port)
+	host := req.URL.Hostname()
+	port := req.URL.Port()
+	if port == "" {
+		switch req.URL.Scheme {
+		case "http":
+			port = "80"
+		case "https":
+			port = "443"
+		}
 	}
+	addr := net.JoinHostPort(host, port)
 
 	transport, err := rt.getTransport(req.Context(), req.Proto, req.URL.Scheme, addr)
 	if err != nil {
