@@ -11,6 +11,8 @@ type direct struct {
 	dialer   net.Dialer
 	listener net.ListenConfig
 	family   string // "4", "6", or "" (any)
+	listenV4 string // local listen address for udp4 (e.g. "1.2.3.4:0")
+	listenV6 string // local listen address for udp6 (e.g. "[::1]:0")
 }
 
 // Direct creates a new direct dialer with optional local IP for binding.
@@ -21,14 +23,12 @@ func Direct(ip net.IP, timeout time.Duration) *direct {
 	if ip != nil {
 		if ip.To4() != nil {
 			d.family = "4"
-			ctrl := control(ip, nil)
-			d.dialer.Control = ctrl
-			d.listener.Control = ctrl
+			d.listenV4 = ip.String() + ":0"
+			d.dialer.Control = control(ip, nil)
 		} else {
 			d.family = "6"
-			ctrl := control(nil, ip)
-			d.dialer.Control = ctrl
-			d.listener.Control = ctrl
+			d.listenV6 = "[" + ip.String() + "]:0"
+			d.dialer.Control = control(nil, ip)
 		}
 	}
 	return d
@@ -36,16 +36,14 @@ func Direct(ip net.IP, timeout time.Duration) *direct {
 
 // DirectDualStack creates a new direct dialer with both IPv4 and IPv6 local addresses.
 func DirectDualStack(ipv4, ipv6 net.IP, timeout time.Duration) *direct {
-	ctrl := control(ipv4, ipv6)
 	return &direct{
 		dialer: net.Dialer{
 			Timeout:       timeout,
 			FallbackDelay: time.Second,
-			Control:       ctrl,
+			Control:       control(ipv4, ipv6),
 		},
-		listener: net.ListenConfig{
-			Control: ctrl,
-		},
+		listenV4: ipv4.String() + ":0",
+		listenV6: "[" + ipv6.String() + "]:0",
 	}
 }
 
@@ -56,7 +54,8 @@ func (d *direct) DialContext(ctx context.Context, network, addr string) (net.Con
 
 // ListenPacket creates a packet connection for QUIC/UDP using the configured listener.
 func (d *direct) ListenPacket(ctx context.Context, network, addr string) (net.PacketConn, error) {
-	return d.listener.ListenPacket(ctx, d.forceFamily(network), ":0")
+	network = d.forceFamily(network)
+	return d.listener.ListenPacket(ctx, network, d.listenAddr(network))
 }
 
 // SupportHTTP3 indicates that the direct dialer supports HTTP/3.
@@ -77,4 +76,19 @@ func (d *direct) forceFamily(network string) string {
 	default:
 		return network
 	}
+}
+
+// listenAddr returns the local address to bind the UDP listener to.
+func (d *direct) listenAddr(network string) string {
+	switch network {
+	case "udp4":
+		if d.listenV4 != "" {
+			return d.listenV4
+		}
+	case "udp6":
+		if d.listenV6 != "" {
+			return d.listenV6
+		}
+	}
+	return ":0"
 }
