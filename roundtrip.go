@@ -174,6 +174,12 @@ func (rt *RoundTripper) forceHTTP3(proto, addr string) bool {
 	if rt.profile.H3 == nil || rt.disableHTTP3 || !rt.dialer.SupportHTTP3() {
 		return false
 	}
+	if strings.EqualFold(proto, "HTTP/1.0") || strings.EqualFold(proto, "HTTP/1.1") {
+		return false
+	}
+	if strings.EqualFold(proto, "HTTP/2.0") || strings.EqualFold(proto, "h2") {
+		return false
+	}
 	if _, ok := rt.altsvc.Load(addr); ok {
 		return true
 	}
