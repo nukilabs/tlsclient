@@ -21,14 +21,13 @@ func Direct(ip net.IP, timeout time.Duration) *direct {
 		dialer: net.Dialer{Timeout: timeout},
 	}
 	if ip != nil {
+		d.dialer.LocalAddr = &net.TCPAddr{IP: ip}
 		if ip.To4() != nil {
 			d.family = "4"
 			d.listenV4 = ip.String() + ":0"
-			d.dialer.Control = control(ip, nil)
 		} else {
 			d.family = "6"
 			d.listenV6 = "[" + ip.String() + "]:0"
-			d.dialer.Control = control(nil, ip)
 		}
 	}
 	return d
