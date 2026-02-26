@@ -12,6 +12,7 @@ type direct struct {
 	listener net.ListenConfig
 }
 
+// Direct creates a new direct dialer with optional local address for binding.
 func Direct(addr net.Addr, timeout time.Duration) *direct {
 	return &direct{
 		dialer: net.Dialer{
@@ -21,7 +22,18 @@ func Direct(addr net.Addr, timeout time.Duration) *direct {
 	}
 }
 
-// DialContext instantiates a net.Dialer and invokes its DialContext receiver with the supplied parameters.
+// DirectDualStack creates a new direct dialer with both IPv4 and IPv6 local addresses.
+func DirectDualStack(ipv4, ipv6 net.IP, timeout time.Duration) *direct {
+	return &direct{
+		dialer: net.Dialer{
+			Timeout:        timeout,
+			FallbackDelay:  time.Second,
+			ControlContext: control(ipv4, ipv6),
+		},
+	}
+}
+
+// DialContext dials the address using the configured dialer.
 func (d *direct) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	return d.dialer.DialContext(ctx, network, addr)
 }

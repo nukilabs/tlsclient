@@ -1,7 +1,9 @@
 package tlsclient
 
 import (
+	"errors"
 	"io"
+	"net"
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -21,7 +23,7 @@ type Client struct {
 	profile    profiles.ClientProfile
 	pinner     *Pinner
 	tracker    bandwidth.Tracker
-	proxyURL   *url.URL
+	proxyVal   any
 	preHooks   []PreHook
 	postHooks  []PostHook
 	inPostHook atomic.Bool
@@ -88,16 +90,38 @@ func (c *Client) Clone() *Client {
 	return clone
 }
 
-func (c *Client) GetProxy() *url.URL {
-	return c.proxyURL
+// GetProxy returns the current proxy value. The type depends on what was passed to SetProxy:
+// *url.URL for proxy URLs, net.IP for single direct IPs, or [2]net.IP for dual-stack.
+func (c *Client) GetProxy() any {
+	return c.proxyVal
 }
 
-func (c *Client) SetProxy(proxyURL *url.URL) error {
-	dialer, err := proxy.New(proxyURL, c.Timeout, c.tlsConf)
+// SetProxy configures the proxy/dialer for the client. Accepted types:
+//   - *url.URL: proxy URL (http, https, socks5) or bare IP (no scheme) for direct binding
+//   - net.IP: direct connection bound to a single local IP
+//   - [2]net.IP: dual-stack direct connection bound to IPv4 ([0]) and IPv6 ([1])
+//   - nil: direct connection with no local address binding
+func (c *Client) SetProxy(v any) error {
+	var dialer proxy.ContextDialer
+	var err error
+
+	switch v := v.(type) {
+	case *url.URL:
+		dialer, err = proxy.New(v, c.Timeout, c.tlsConf)
+	case net.IP:
+		dialer = proxy.Direct(&net.TCPAddr{IP: v}, c.Timeout)
+	case [2]net.IP:
+		dialer = proxy.DirectDualStack(v[0], v[1], c.Timeout)
+	case nil:
+		dialer = proxy.Direct(nil, c.Timeout)
+	default:
+		return errors.New("unsupported proxy type")
+	}
 	if err != nil {
 		return err
 	}
-	c.proxyURL = proxyURL
+
+	c.proxyVal = v
 	c.Transport = NewRoundTripper(c.profile, dialer, c.pinner, c.tracker, c.tlsConf, c.quicConf, c.opts)
 	return nil
 }
