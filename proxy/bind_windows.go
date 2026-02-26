@@ -3,13 +3,12 @@
 package proxy
 
 import (
-	"context"
 	"net"
 	"syscall"
 )
 
-func control(ipv4, ipv6 net.IP) func(context.Context, string, string, syscall.RawConn) error {
-	return func(ctx context.Context, network, address string, c syscall.RawConn) error {
+func control(ipv4, ipv6 net.IP) func(string, string, syscall.RawConn) error {
+	return func(network, address string, c syscall.RawConn) error {
 		var err error
 		c.Control(func(fd uintptr) {
 			switch network {

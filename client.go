@@ -109,7 +109,7 @@ func (c *Client) SetProxy(v any) error {
 	case *url.URL:
 		dialer, err = proxy.New(v, c.Timeout, c.tlsConf)
 	case net.IP:
-		dialer = proxy.Direct(&net.TCPAddr{IP: v}, c.Timeout)
+		dialer = proxy.Direct(v, c.Timeout)
 	case [2]net.IP:
 		dialer = proxy.DirectDualStack(v[0], v[1], c.Timeout)
 	case nil:

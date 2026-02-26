@@ -30,7 +30,7 @@ func New(proxyURL *url.URL, timeout time.Duration, tlsConf *tls.Config) (Context
 		if ip == nil {
 			return nil, errors.New("invalid ip address for direct connection: " + proxyURL.Host)
 		}
-		return Direct(&net.TCPAddr{IP: ip}, timeout), nil
+		return Direct(ip, timeout), nil
 	case "socks5", "socks5h":
 		return socks.NewDialer(proxyURL)
 	case "http", "https":
