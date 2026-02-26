@@ -55,7 +55,7 @@ func (d *direct) DialContext(ctx context.Context, network, addr string) (net.Con
 // ListenPacket creates a packet connection for QUIC/UDP using the configured listener.
 func (d *direct) ListenPacket(ctx context.Context, network, addr string) (net.PacketConn, error) {
 	network = d.forceFamily(network)
-	return d.listener.ListenPacket(ctx, network, d.listenAddr(network))
+	return d.listener.ListenPacket(ctx, network, d.listenAddr(network, addr))
 }
 
 // SupportHTTP3 indicates that the direct dialer supports HTTP/3.
@@ -79,7 +79,8 @@ func (d *direct) forceFamily(network string) string {
 }
 
 // listenAddr returns the local address to bind the UDP listener to.
-func (d *direct) listenAddr(network string) string {
+// remoteAddr is the resolved remote address used to determine the family when network is "udp".
+func (d *direct) listenAddr(network, remoteAddr string) string {
 	switch network {
 	case "udp4":
 		if d.listenV4 != "" {
@@ -88,6 +89,16 @@ func (d *direct) listenAddr(network string) string {
 	case "udp6":
 		if d.listenV6 != "" {
 			return d.listenV6
+		}
+	case "udp":
+		host, _, _ := net.SplitHostPort(remoteAddr)
+		if ip := net.ParseIP(host); ip != nil {
+			if ip.To4() != nil && d.listenV4 != "" {
+				return d.listenV4
+			}
+			if ip.To4() == nil && d.listenV6 != "" {
+				return d.listenV6
+			}
 		}
 	}
 	return ":0"
