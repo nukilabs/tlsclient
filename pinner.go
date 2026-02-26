@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"slices"
 	"sync"
 
 	tls "github.com/nukilabs/utls"
@@ -42,10 +43,8 @@ func (p *Pinner) Pin(certs []*x509.Certificate, addr string) error {
 
 	for _, cert := range certs {
 		fingerprint := p.Fingerprint(cert)
-		for _, pin := range p.pins[addr] {
-			if fingerprint == pin {
-				return nil
-			}
+		if slices.Contains(p.pins[addr], fingerprint) {
+			return nil
 		}
 	}
 

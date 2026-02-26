@@ -385,11 +385,5 @@ func (rt *RoundTripper) dialQuic(ctx context.Context, addr string, tlscfg *tls.C
 		return nil, err
 	}
 
-	state := conn.ConnectionState()
-	if err := rt.pinner.Pin(state.TLS.PeerCertificates, addr); err != nil {
-		pconn.Close()
-		return nil, err
-	}
-
 	return conn, nil
 }
