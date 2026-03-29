@@ -175,6 +175,19 @@ func (c *Client) CloseIdleConnections() {
 }
 
 func (c *Client) SetRedirectFunc(f func(req *http.Request, via []*http.Request) error) {
+	f = func(req *http.Request, via []*http.Request) error {
+		err := f(req, via)
+		if err != nil {
+			return err
+		}
+		for _, hook := range c.preHooks {
+			req, err = hook(c, req)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	c.Client.CheckRedirect = f
 	c.redirect = f
 }
