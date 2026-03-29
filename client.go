@@ -175,7 +175,7 @@ func (c *Client) CloseIdleConnections() {
 }
 
 func (c *Client) SetRedirectFunc(f func(req *http.Request, via []*http.Request) error) {
-	f = func(req *http.Request, via []*http.Request) error {
+	g := func(req *http.Request, via []*http.Request) error {
 		err := f(req, via)
 		if err != nil {
 			return err
@@ -188,8 +188,8 @@ func (c *Client) SetRedirectFunc(f func(req *http.Request, via []*http.Request) 
 		}
 		return nil
 	}
-	c.Client.CheckRedirect = f
-	c.redirect = f
+	c.Client.CheckRedirect = g
+	c.redirect = g
 }
 
 func (c *Client) SetFollowRedirects(follow bool) {
