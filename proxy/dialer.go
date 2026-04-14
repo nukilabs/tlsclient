@@ -30,6 +30,11 @@ type Dialer struct {
 	h3ClientConn *http3.ClientConn
 }
 
+type opAddr string
+
+func (a opAddr) Network() string { return "" }
+func (a opAddr) String() string  { return string(a) }
+
 func (d *Dialer) expandTemplate(addr string) (*url.URL, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
