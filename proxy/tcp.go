@@ -15,6 +15,8 @@ import (
 )
 
 func (d *Dialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	proxy, dst := opAddr(d.proxyURL.Host), opAddr(addr)
+
 	req := &http.Request{
 		Method: http.MethodConnect,
 		URL:    &url.URL{Host: addr},
@@ -30,7 +32,11 @@ func (d *Dialer) DialContext(ctx context.Context, network, addr string) (net.Con
 	if d.h2ClientConn != nil {
 		if d.h2ClientConn.CanTakeNewRequest() {
 			d.h2DialLock.Unlock()
-			return d.connectHttp2(req, d.h2Conn, d.h2ClientConn)
+			c, err := d.connectHttp2(req, d.h2Conn, d.h2ClientConn)
+			if err != nil {
+				return nil, &net.OpError{Op: "connect", Net: network, Source: proxy, Addr: dst, Err: err}
+			}
+			return c, nil
 		}
 	}
 	d.h2DialLock.Unlock()
@@ -40,26 +46,34 @@ func (d *Dialer) DialContext(ctx context.Context, network, addr string) (net.Con
 		var dd net.Dialer
 		conn, err := dd.DialContext(ctx, network, d.proxyURL.Host)
 		if err != nil {
-			return nil, fmt.Errorf("dialing proxy failed: %w", err)
+			return nil, &net.OpError{Op: "connect", Net: network, Source: proxy, Addr: dst, Err: fmt.Errorf("dialing proxy failed: %w", err)}
 		}
-		return d.connectHttp1(req, conn)
+		c, err := d.connectHttp1(req, conn)
+		if err != nil {
+			return nil, &net.OpError{Op: "connect", Net: network, Source: proxy, Addr: dst, Err: err}
+		}
+		return c, nil
 	case "https":
 		tlsConf := d.tlsConf.Clone()
 		tlsConf.ServerName = d.proxyURL.Hostname()
 		tlsConf.NextProtos = []string{"http/1.1", "h2"}
 		conn, err := tls.Dial(network, d.proxyURL.Host, tlsConf)
 		if err != nil {
-			return nil, fmt.Errorf("dialing tls connection failed: %w", err)
+			return nil, &net.OpError{Op: "connect", Net: network, Source: proxy, Addr: dst, Err: fmt.Errorf("dialing tls connection failed: %w", err)}
 		}
 		if err := conn.HandshakeContext(ctx); err != nil {
 			conn.Close()
-			return nil, fmt.Errorf("tls handshake failed: %w", err)
+			return nil, &net.OpError{Op: "connect", Net: network, Source: proxy, Addr: dst, Err: fmt.Errorf("tls handshake failed: %w", err)}
 		}
 
 		state := conn.ConnectionState()
 		switch state.NegotiatedProtocol {
 		case "http/1.1":
-			return d.connectHttp1(req, conn)
+			c, err := d.connectHttp1(req, conn)
+			if err != nil {
+				return nil, &net.OpError{Op: "connect", Net: network, Source: proxy, Addr: dst, Err: err}
+			}
+			return c, nil
 		case "h2":
 			d.h2DialLock.Lock()
 			defer d.h2DialLock.Unlock()
@@ -68,18 +82,22 @@ func (d *Dialer) DialContext(ctx context.Context, network, addr string) (net.Con
 			clientConn, err := tr.NewClientConn(conn)
 			if err != nil {
 				conn.Close()
-				return nil, fmt.Errorf("dialing h2 client connection failed: %w", err)
+				return nil, &net.OpError{Op: "connect", Net: network, Source: proxy, Addr: dst, Err: fmt.Errorf("dialing h2 client connection failed: %w", err)}
 			}
 			d.h2Conn = conn
 			d.h2ClientConn = clientConn
 
-			return d.connectHttp2(req, conn, clientConn)
+			c, err := d.connectHttp2(req, conn, clientConn)
+			if err != nil {
+				return nil, &net.OpError{Op: "connect", Net: network, Source: proxy, Addr: dst, Err: err}
+			}
+			return c, nil
 		default:
 			conn.Close()
-			return nil, fmt.Errorf("unsupported protocol: %s", state.NegotiatedProtocol)
+			return nil, &net.OpError{Op: "connect", Net: network, Source: proxy, Addr: dst, Err: errors.New("unsupported protocol: " + state.NegotiatedProtocol)}
 		}
 	default:
-		return nil, errors.New("unsupported proxy scheme: " + d.proxyURL.Scheme)
+		return nil, &net.OpError{Op: "connect", Net: network, Source: proxy, Addr: dst, Err: errors.New("unsupported proxy scheme: " + d.proxyURL.Scheme)}
 	}
 }
 

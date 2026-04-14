@@ -21,9 +21,11 @@ const (
 )
 
 func (d *Dialer) ListenPacket(ctx context.Context, network, addr string) (net.PacketConn, error) {
+	proxy, dst := opAddr(d.proxyURL.Host), opAddr(addr)
+
 	u, err := d.expandTemplate(addr)
 	if err != nil {
-		return nil, err
+		return nil, &net.OpError{Op: "listen", Net: network, Source: proxy, Addr: dst, Err: err}
 	}
 	d.h3DialOnce.Do(func() {
 		tlsConf := d.tlsConf.Clone()
@@ -41,26 +43,26 @@ func (d *Dialer) ListenPacket(ctx context.Context, network, addr string) (net.Pa
 		d.h3ClientConn = tr.NewClientConn(conn)
 	})
 	if d.h3DialErr != nil {
-		return nil, d.h3DialErr
+		return nil, &net.OpError{Op: "listen", Net: network, Source: proxy, Addr: dst, Err: d.h3DialErr}
 	}
 	select {
 	case <-ctx.Done():
-		return nil, context.Cause(ctx)
+		return nil, &net.OpError{Op: "listen", Net: network, Source: proxy, Addr: dst, Err: context.Cause(ctx)}
 	case <-d.h3ClientConn.Context().Done():
-		return nil, context.Cause(d.h3ClientConn.Context())
+		return nil, &net.OpError{Op: "listen", Net: network, Source: proxy, Addr: dst, Err: context.Cause(d.h3ClientConn.Context())}
 	case <-d.h3ClientConn.ReceivedSettings():
 	}
 	settings := d.h3ClientConn.Settings()
 	if !settings.EnableExtendedConnect {
-		return nil, errors.New("server didn't enable extended connect")
+		return nil, &net.OpError{Op: "listen", Net: network, Source: proxy, Addr: dst, Err: errors.New("server didn't enable extended connect")}
 	}
 	if !settings.EnableDatagrams {
-		return nil, errors.New("server didn't enable datagrams")
+		return nil, &net.OpError{Op: "listen", Net: network, Source: proxy, Addr: dst, Err: errors.New("server didn't enable datagrams")}
 	}
 
 	rstr, err := d.h3ClientConn.OpenRequestStream(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open request stream: %w", err)
+		return nil, &net.OpError{Op: "listen", Net: network, Source: proxy, Addr: dst, Err: fmt.Errorf("failed to open request stream: %w", err)}
 	}
 	if err := rstr.SendRequestHeader(&http.Request{
 		Method: http.MethodConnect,
@@ -72,14 +74,14 @@ func (d *Dialer) ListenPacket(ctx context.Context, network, addr string) (net.Pa
 		},
 		URL: u,
 	}); err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return nil, &net.OpError{Op: "listen", Net: network, Source: proxy, Addr: dst, Err: fmt.Errorf("failed to send request: %w", err)}
 	}
 	res, err := rstr.ReadResponse()
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, &net.OpError{Op: "listen", Net: network, Source: proxy, Addr: dst, Err: fmt.Errorf("failed to read response: %w", err)}
 	}
 	if res.StatusCode < 200 || res.StatusCode > 299 {
-		return nil, fmt.Errorf("server responded with %d", res.StatusCode)
+		return nil, &net.OpError{Op: "listen", Net: network, Source: proxy, Addr: dst, Err: fmt.Errorf("server responded with %d", res.StatusCode)}
 	}
 	return newH3Conn(rstr, d.h3Conn.LocalAddr()), nil
 }

@@ -50,4 +50,3 @@ func New(proxyURL *url.URL, timeout time.Duration, tlsConf *tls.Config) (Context
 		return nil, errors.New("unsupported proxy scheme: " + proxyURL.Scheme)
 	}
 }
-
