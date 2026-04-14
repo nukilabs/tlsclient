@@ -6,7 +6,7 @@ require (
 	github.com/andybalholm/brotli v1.2.0
 	github.com/cilium/ebpf v0.21.0
 	github.com/klauspost/compress v1.18.0
-	github.com/nukilabs/http v1.1.8
+	github.com/nukilabs/http v1.2.0
 	github.com/nukilabs/masque-go v1.0.0
 	github.com/nukilabs/quic-go v1.0.8
 	github.com/nukilabs/socks v1.0.0

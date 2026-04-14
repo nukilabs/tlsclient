@@ -24,8 +24,8 @@ github.com/mdlayher/netlink v1.7.2 h1:/UtM3ofJap7Vl4QWCPDGXY8d3GIY2UGSDbK+QWmY8/
 github.com/mdlayher/netlink v1.7.2/go.mod h1:xraEF7uJbxLhc5fpHL4cPe221LI2bdttWlU+ZGLfQSw=
 github.com/mdlayher/socket v0.5.1 h1:VZaqt6RkGkt2OE9l3GcC6nZkqD3xKeQLyfleW/uBcos=
 github.com/mdlayher/socket v0.5.1/go.mod h1:TjPLHI1UgwEv5J1B5q0zTZq12A/6H7nKmtTanQE37IQ=
-github.com/nukilabs/http v1.1.8 h1:Jw6IGVgKUd49WTrjrGdJT/r7bM/b0lGfrahq57schYY=
-github.com/nukilabs/http v1.1.8/go.mod h1:+fa1/G/mtq2r5NubXP0/nD/5FZwEjnMdz06zfxP+S98=
+github.com/nukilabs/http v1.2.0 h1:9ql17/6s/C4w6BFnI/BoC5FPCtzyOqpFSWzRwo8Arkg=
+github.com/nukilabs/http v1.2.0/go.mod h1:+fa1/G/mtq2r5NubXP0/nD/5FZwEjnMdz06zfxP+S98=
 github.com/nukilabs/masque-go v1.0.0 h1:6bcoErtHkHZRVppkCcxiDSbYMjesVavb6C0IAUZLL4Q=
 github.com/nukilabs/masque-go v1.0.0/go.mod h1:YH5jQGVb0M/C0HYSjM70Pz9RFmSmZ9wUWFSkJg3qZcw=
 github.com/nukilabs/quic-go v1.0.8 h1:nAEFLHOZZoz7P8r5Ct9QDWFgqg8j5omskjU7fHkLXcY=
