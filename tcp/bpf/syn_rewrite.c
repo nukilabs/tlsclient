@@ -75,14 +75,17 @@ int syn_rewrite(struct __sk_buff *skb) {
     if (ip->protocol != IPPROTO_TCP)
         return TC_ACT_OK;
 
-    __u32 ip_hl = (__u32)ip->ihl * 4;
-    if (ip_hl < sizeof(struct iphdr))
+    // Only handle IP headers without options (ihl == 5, 20 bytes). The
+    // unprivileged BPF verifier forbids pointer arithmetic with runtime
+    // values, so we keep all packet-pointer offsets compile-time constant.
+    // Outbound SYNs from the kernel almost never carry IP options.
+    if (ip->ihl != 5)
         return TC_ACT_OK;
 
-    if (data + ETH_HLEN + ip_hl + TCP_HDR_LEN > data_end)
+    if (data + ETH_HLEN + sizeof(struct iphdr) + TCP_HDR_LEN > data_end)
         return TC_ACT_OK;
 
-    struct tcphdr *tcp = data + ETH_HLEN + ip_hl;
+    struct tcphdr *tcp = data + ETH_HLEN + sizeof(struct iphdr);
     if (!tcp->syn || tcp->ack)
         return TC_ACT_OK;
     if (tcp->doff < 5)
@@ -94,7 +97,7 @@ int syn_rewrite(struct __sk_buff *skb) {
 
     // Reject SYN-with-payload (TCP Fast Open data, etc.). Our resize logic
     // assumes options sit at the very tail of the skb.
-    __u32 expected_len = ETH_HLEN + ip_hl + TCP_HDR_LEN + cur_opts_len;
+    __u32 expected_len = ETH_HLEN + sizeof(struct iphdr) + TCP_HDR_LEN + cur_opts_len;
     if (skb->len != expected_len)
         return TC_ACT_OK;
 
@@ -111,7 +114,7 @@ int syn_rewrite(struct __sk_buff *skb) {
     __u16 old_tot_len_h = bpf_ntohs(old_tot_len_n);
     __u16 new_tot_len_h = old_tot_len_h + delta;
     __u16 new_tot_len_n = bpf_htons(new_tot_len_h);
-    __u16 old_tcp_len_h = old_tot_len_h - ip_hl;
+    __u16 old_tcp_len_h = old_tot_len_h - sizeof(struct iphdr);
     __u16 new_tcp_len_h = old_tcp_len_h + delta;
     __u8  new_doff      = (TCP_HDR_LEN + new_opts_len) / 4;
 
@@ -122,7 +125,7 @@ int syn_rewrite(struct __sk_buff *skb) {
     // 4-byte-aligned options (kernel pads with NOPs).
     __u8 old_opts[TCP_OPTIONS_MAX] = {};
     {
-        __u32 opts_off = ETH_HLEN + ip_hl + TCP_HDR_LEN;
+        __u32 opts_off = ETH_HLEN + sizeof(struct iphdr) + TCP_HDR_LEN;
         #pragma unroll
         for (__u32 i = 0; i < TCP_OPTIONS_MAX / 4; i++) {
             __u32 byte_off = i * 4;
@@ -141,7 +144,7 @@ int syn_rewrite(struct __sk_buff *skb) {
     }
 
     __u32 ip_off       = ETH_HLEN;
-    __u32 tcp_off      = ETH_HLEN + ip_hl;
+    __u32 tcp_off      = ETH_HLEN + sizeof(struct iphdr);
     __u32 ip_csum_off  = ip_off  + offsetof(struct iphdr,  check);
     __u32 tcp_csum_off = tcp_off + offsetof(struct tcphdr, check);
 
@@ -160,7 +163,7 @@ int syn_rewrite(struct __sk_buff *skb) {
                             old_tot_len_n, new_tot_len_n, 2);
         bpf_skb_store_bytes(skb, ip_off + offsetof(struct iphdr, tot_len),
                             &new_tot_len_n, 2, 0);
-        // TCP pseudo-header carries the segment length (IP tot_len - ip_hl).
+        // TCP pseudo-header carries the segment length (IP tot_len - 20).
         bpf_l4_csum_replace(skb, tcp_csum_off,
                             bpf_htons(old_tcp_len_h),
                             bpf_htons(new_tcp_len_h),
