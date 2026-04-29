@@ -1,0 +1,17 @@
+CompileFlags:
+    Compiler: clang
+    Add:
+        - -target
+        - bpf
+        - -O2
+        - -g
+        - -Wall
+        - -nostdinc
+        - -I.
+        - -Iheaders
+    Remove:
+        - -m*
+        - -f*sanitize*
+Diagnostics:
+    Suppress:
+        - unused-function
