@@ -5,18 +5,16 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
-
-	"github.com/cilium/ebpf/link"
 )
 
 // manager loads and attaches the SYN-rewriting BPF program and tracks
 // per-profile fwmarks. There is one manager per process; access goes
-// through the package singleton (defaultManager). Use SetInterface
-// or TCP_IFACE to pick the egress interface.
+// through the package singleton (defaultManager). Use SetInterface or
+// the TCP_IFACE env var to pick the egress interface.
 type manager struct {
 	iface  string
 	objs   *synrewriteObjects
-	link   link.Link
+	detach func() error
 	closed atomic.Bool
 
 	mu       sync.Mutex
@@ -27,14 +25,14 @@ type manager struct {
 // newManager loads the BPF program and attaches it to the egress hook of
 // iface. Requires CAP_NET_ADMIN + CAP_BPF (or root).
 func newManager(iface string) (*manager, error) {
-	objs, l, err := loadAndAttach(iface)
+	objs, detach, err := loadAndAttach(iface)
 	if err != nil {
 		return nil, err
 	}
 	return &manager{
-		iface: iface,
-		objs:  objs,
-		link:  l,
+		iface:  iface,
+		objs:   objs,
+		detach: detach,
 	}, nil
 }
 
@@ -57,8 +55,8 @@ func (m *manager) close() error {
 		return nil
 	}
 	var errs []error
-	if m.link != nil {
-		if err := m.link.Close(); err != nil {
+	if m.detach != nil {
+		if err := m.detach(); err != nil {
 			errs = append(errs, err)
 		}
 	}

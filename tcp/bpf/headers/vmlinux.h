@@ -37,6 +37,17 @@ struct ethhdr {
 	__be16        h_proto;
 } __attribute__((packed));
 
+/* Minimal IPv6 header — we only touch payload_len, nexthdr, hop_limit. */
+struct ipv6hdr {
+	__u8    version_priority; /* version(4) + priority(4) */
+	__u8    flow_lbl[3];
+	__be16  payload_len;
+	__u8    nexthdr;
+	__u8    hop_limit;
+	__u8    saddr[16];
+	__u8    daddr[16];
+};
+
 struct iphdr {
 #if defined(__LITTLE_ENDIAN_BITFIELD) || __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 	__u8    ihl: 4,
