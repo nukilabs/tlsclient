@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"net"
+	"syscall"
 	"time"
 )
 
@@ -44,6 +45,28 @@ func DirectDualStack(ipv4, ipv6 net.IP, timeout time.Duration) *direct {
 		listenV4: ipv4.String() + ":0",
 		listenV6: "[" + ipv6.String() + "]:0",
 	}
+}
+
+// WithControl composes ctrl with any existing Control function on the
+// underlying net.Dialer / net.ListenConfig. The composed function runs the
+// existing one first (if set) and stops on its error, then runs ctrl.
+// Used to layer behaviors like SO_MARK on top of local-address binding.
+func (d *direct) WithControl(ctrl func(network, address string, c syscall.RawConn) error) *direct {
+	if ctrl == nil {
+		return d
+	}
+	prev := d.dialer.Control
+	composed := func(network, address string, c syscall.RawConn) error {
+		if prev != nil {
+			if err := prev(network, address, c); err != nil {
+				return err
+			}
+		}
+		return ctrl(network, address, c)
+	}
+	d.dialer.Control = composed
+	d.listener.Control = composed
+	return d
 }
 
 // DialContext dials the address using the configured dialer.

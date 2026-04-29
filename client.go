@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/nukilabs/http"
@@ -31,6 +32,8 @@ type Client struct {
 	tlsConf    *tls.Config
 	quicConf   *quic.Config
 	opts       *TransportOptions
+
+	tcpControl func(network, address string, c syscall.RawConn) error
 
 	AutoDecompress bool
 }
@@ -61,7 +64,7 @@ func New(profile profiles.ClientProfile, options ...Option) *Client {
 	if client.pinner == nil {
 		client.pinner = NewPinner(false)
 	}
-	dialer := proxy.Direct(nil, client.Timeout)
+	dialer := proxy.Direct(nil, client.Timeout).WithControl(client.tcpControl)
 	client.Transport = NewRoundTripper(profile, dialer, client.pinner, client.tracker, client.tlsConf, client.quicConf, client.opts)
 	return client
 }
@@ -82,10 +85,11 @@ func (c *Client) Clone() *Client {
 		tlsConf:        c.tlsConf.Clone(),
 		quicConf:       c.quicConf.Clone(),
 		opts:           c.opts,
+		tcpControl:     c.tcpControl,
 		AutoDecompress: c.AutoDecompress,
 	}
 
-	dialer := proxy.Direct(nil, clone.Timeout)
+	dialer := proxy.Direct(nil, clone.Timeout).WithControl(clone.tcpControl)
 	clone.Transport = NewRoundTripper(clone.profile, dialer, clone.pinner, clone.tracker, clone.tlsConf, clone.quicConf, clone.opts)
 	return clone
 }
@@ -109,11 +113,11 @@ func (c *Client) SetProxy(v any) error {
 	case *url.URL:
 		dialer, err = proxy.New(v, c.Timeout, c.tlsConf)
 	case net.IP:
-		dialer = proxy.Direct(v, c.Timeout)
+		dialer = proxy.Direct(v, c.Timeout).WithControl(c.tcpControl)
 	case [2]net.IP:
-		dialer = proxy.DirectDualStack(v[0], v[1], c.Timeout)
+		dialer = proxy.DirectDualStack(v[0], v[1], c.Timeout).WithControl(c.tcpControl)
 	case nil:
-		dialer = proxy.Direct(nil, c.Timeout)
+		dialer = proxy.Direct(nil, c.Timeout).WithControl(c.tcpControl)
 	default:
 		return errors.New("unsupported proxy type")
 	}
