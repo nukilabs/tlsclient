@@ -14,13 +14,18 @@
 // than the kernel-emitted one.
 //
 // IMPLEMENTATION NOTE: the unprivileged BPF verifier (CAP_BPF without
-// CAP_SYS_ADMIN) is much stricter about stack pointer hygiene and pointer
-// arithmetic than the privileged path. We deliberately keep this whole
-// program in a single function with no helper calls — pointer parameters
-// at function boundaries trigger "attempt to corrupt spilled pointer on
-// stack" rejections under !root. This makes the code repetitive (the IPv4
-// and IPv6 paths each carry a copy of the TCP rewrite logic) but lets the
-// verifier reason about straight-line code.
+// CAP_SYS_ADMIN) is much stricter about stack hygiene than the privileged
+// path. We deliberately avoid:
+//   - helper functions that take pointer parameters (causes implicit
+//     stack spills the verifier rejects with "corrupt spilled pointer"),
+//   - large stack arrays that could share slots with spilled pointers
+//     (e.g. 40-byte option scratch buffers),
+//   - bpf_csum_diff over stack-array casts.
+//
+// Instead the IPv4 and IPv6 paths each carry their own copy of the rewrite
+// logic, and the options checksum is updated in 4-byte chunks read straight
+// from the packet (for the old bytes) and from the map value (for the new
+// bytes). The only stack scalars are small fixed-size temporaries.
 
 #include "vmlinux.h"
 #include "bpf_helpers.h"
@@ -77,8 +82,6 @@ int syn_rewrite(struct __sk_buff *skb) {
         struct iphdr *ip = data + ETH_HLEN;
         if (ip->protocol != IPPROTO_TCP)
             return TC_ACT_OK;
-        // Pin ihl=5 so the TCP header offset is compile-time constant
-        // (unprivileged verifier forbids runtime pointer arithmetic).
         if (ip->ihl != 5)
             return TC_ACT_OK;
         if (data + ETH_HLEN + sizeof(struct iphdr) + TCP_HDR_LEN > data_end)
@@ -108,18 +111,42 @@ int syn_rewrite(struct __sk_buff *skb) {
         __u16 old_tcp_len_h = old_tot_len_h - sizeof(struct iphdr);
         __u16 new_tot_len_n = bpf_htons(old_tot_len_h + delta);
 
-        __u8 old_opts[TCP_OPTIONS_MAX] = {};
-        #pragma unroll
-        for (__u32 i = 0; i < TCP_OPTIONS_MAX / 4; i++) {
-            __u32 byte_off = i * 4;
-            if (byte_off >= cur_opts_len)
-                break;
-            __u32 chunk;
-            if (bpf_skb_load_bytes(skb,
-                                   ETH_HLEN + sizeof(struct iphdr) + TCP_HDR_LEN + byte_off,
-                                   &chunk, 4) < 0)
-                return TC_ACT_OK;
-            __builtin_memcpy(&old_opts[byte_off], &chunk, 4);
+        // From here on we use absolute offsets only; ip/tcp/data pointers
+        // are no longer needed (and are invalidated by change_tail anyway).
+        const __u32 ip_off       = ETH_HLEN;
+        const __u32 tcp_off      = ETH_HLEN + sizeof(struct iphdr);
+        const __u32 opts_off     = tcp_off + TCP_HDR_LEN;
+        const __u32 ip_csum_off  = ip_off  + offsetof(struct iphdr,  check);
+        const __u32 tcp_csum_off = tcp_off + offsetof(struct tcphdr, check);
+        __u8 new_doff = (TCP_HDR_LEN + new_opts_len) / 4;
+
+        // Options checksum: per 4-byte chunk, BEFORE change_tail (so the
+        // old bytes are still in the packet for shrunk profiles). p->options
+        // is already zero-padded past options_len on the Go side.
+        {
+            __u32 max_idx = cur_opts_len > new_opts_len ? cur_opts_len : new_opts_len;
+            #pragma unroll
+            for (__u32 i = 0; i < TCP_OPTIONS_MAX / 4; i++) {
+                __u32 byte_off = i * 4;
+                if (byte_off >= max_idx)
+                    break;
+
+                __u32 old_chunk = 0;
+                if (byte_off < cur_opts_len) {
+                    if (bpf_skb_load_bytes(skb, opts_off + byte_off,
+                                           &old_chunk, 4) < 0)
+                        return TC_ACT_OK;
+                }
+                __u32 new_chunk = ((__u32)p->options[byte_off]) |
+                                  ((__u32)p->options[byte_off + 1] << 8) |
+                                  ((__u32)p->options[byte_off + 2] << 16) |
+                                  ((__u32)p->options[byte_off + 3] << 24);
+
+                if (old_chunk != new_chunk) {
+                    bpf_l4_csum_replace(skb, tcp_csum_off,
+                                        old_chunk, new_chunk, 4);
+                }
+            }
         }
 
         if (delta != 0) {
@@ -127,13 +154,7 @@ int syn_rewrite(struct __sk_buff *skb) {
                 return TC_ACT_OK;
         }
 
-        __u32 ip_off       = ETH_HLEN;
-        __u32 tcp_off      = ETH_HLEN + sizeof(struct iphdr);
-        __u32 ip_csum_off  = ip_off  + offsetof(struct iphdr,  check);
-        __u32 tcp_csum_off = tcp_off + offsetof(struct tcphdr, check);
-        __u8  new_doff     = (TCP_HDR_LEN + new_opts_len) / 4;
-
-        // IPv4 TTL (TTL byte sits with proto byte in the same 16-bit word).
+        // IPv4 TTL.
         {
             __u16 old_word = bpf_htons(((__u16)old_ttl << 8) | ip_proto);
             __u16 new_word = bpf_htons(((__u16)p->ttl  << 8) | ip_proto);
@@ -177,31 +198,15 @@ int syn_rewrite(struct __sk_buff *skb) {
             bpf_skb_store_bytes(skb, tcp_off + 12, &doffres_new, 1, 0);
         }
 
-        // TCP options.
-        if (cur_opts_len > 0 || new_opts_len > 0) {
-            __u8 new_opts[TCP_OPTIONS_MAX] = {};
-            #pragma unroll
-            for (int i = 0; i < TCP_OPTIONS_MAX; i++) {
-                new_opts[i] = (i < (int)new_opts_len) ? p->options[i] : 0;
-            }
-            __s64 csum_delta = bpf_csum_diff((__be32 *)old_opts, TCP_OPTIONS_MAX,
-                                             (__be32 *)new_opts, TCP_OPTIONS_MAX,
-                                             0);
-            if (csum_delta < 0)
+        // Write new options bytes (4-byte chunks straight from map value).
+        #pragma unroll
+        for (__u32 i = 0; i < TCP_OPTIONS_MAX / 4; i++) {
+            __u32 byte_off = i * 4;
+            if (byte_off >= new_opts_len)
+                break;
+            if (bpf_skb_store_bytes(skb, opts_off + byte_off,
+                                    &p->options[byte_off], 4, 0) < 0)
                 return TC_ACT_OK;
-            bpf_l4_csum_replace(skb, tcp_csum_off, 0, (__u32)csum_delta, 0);
-
-            #pragma unroll
-            for (__u32 i = 0; i < TCP_OPTIONS_MAX / 4; i++) {
-                __u32 byte_off = i * 4;
-                if (byte_off >= new_opts_len)
-                    break;
-                __u32 chunk;
-                __builtin_memcpy(&chunk, &p->options[byte_off], 4);
-                if (bpf_skb_store_bytes(skb, tcp_off + TCP_HDR_LEN + byte_off,
-                                        &chunk, 4, 0) < 0)
-                    return TC_ACT_OK;
-            }
         }
 
         return TC_ACT_OK;
@@ -214,8 +219,6 @@ int syn_rewrite(struct __sk_buff *skb) {
         if (data + ETH_HLEN + sizeof(struct ipv6hdr) > data_end)
             return TC_ACT_OK;
         struct ipv6hdr *ip6 = data + ETH_HLEN;
-        // Skip if extension headers present (rare on outbound SYN); keeps
-        // the TCP offset compile-time constant.
         if (ip6->nexthdr != IPPROTO_TCP)
             return TC_ACT_OK;
         if (data + ETH_HLEN + sizeof(struct ipv6hdr) + TCP_HDR_LEN > data_end)
@@ -241,33 +244,47 @@ int syn_rewrite(struct __sk_buff *skb) {
         __u16 old_window_n      = tcp->window;
         __u16 old_payload_len_h = bpf_ntohs(old_payload_len_n);
         __u16 new_payload_len_n = bpf_htons(old_payload_len_h + delta);
-        // For IPv6 with no extension headers, the TCP segment length used
-        // in the TCP pseudo-header == payload_len.
+        // For IPv6 with no extension headers, TCP segment length used in
+        // the TCP pseudo-header == payload_len.
         __u16 old_tcp_len_h     = old_payload_len_h;
 
-        __u8 old_opts[TCP_OPTIONS_MAX] = {};
-        #pragma unroll
-        for (__u32 i = 0; i < TCP_OPTIONS_MAX / 4; i++) {
-            __u32 byte_off = i * 4;
-            if (byte_off >= cur_opts_len)
-                break;
-            __u32 chunk;
-            if (bpf_skb_load_bytes(skb,
-                                   ETH_HLEN + sizeof(struct ipv6hdr) + TCP_HDR_LEN + byte_off,
-                                   &chunk, 4) < 0)
-                return TC_ACT_OK;
-            __builtin_memcpy(&old_opts[byte_off], &chunk, 4);
+        const __u32 ip6_off      = ETH_HLEN;
+        const __u32 tcp_off      = ETH_HLEN + sizeof(struct ipv6hdr);
+        const __u32 opts_off     = tcp_off + TCP_HDR_LEN;
+        const __u32 tcp_csum_off = tcp_off + offsetof(struct tcphdr, check);
+        __u8 new_doff = (TCP_HDR_LEN + new_opts_len) / 4;
+
+        // Options checksum (per 4-byte chunk, before change_tail).
+        {
+            __u32 max_idx = cur_opts_len > new_opts_len ? cur_opts_len : new_opts_len;
+            #pragma unroll
+            for (__u32 i = 0; i < TCP_OPTIONS_MAX / 4; i++) {
+                __u32 byte_off = i * 4;
+                if (byte_off >= max_idx)
+                    break;
+
+                __u32 old_chunk = 0;
+                if (byte_off < cur_opts_len) {
+                    if (bpf_skb_load_bytes(skb, opts_off + byte_off,
+                                           &old_chunk, 4) < 0)
+                        return TC_ACT_OK;
+                }
+                __u32 new_chunk = ((__u32)p->options[byte_off]) |
+                                  ((__u32)p->options[byte_off + 1] << 8) |
+                                  ((__u32)p->options[byte_off + 2] << 16) |
+                                  ((__u32)p->options[byte_off + 3] << 24);
+
+                if (old_chunk != new_chunk) {
+                    bpf_l4_csum_replace(skb, tcp_csum_off,
+                                        old_chunk, new_chunk, 4);
+                }
+            }
         }
 
         if (delta != 0) {
             if (bpf_skb_change_tail(skb, skb->len + delta, 0) < 0)
                 return TC_ACT_OK;
         }
-
-        __u32 ip6_off      = ETH_HLEN;
-        __u32 tcp_off      = ETH_HLEN + sizeof(struct ipv6hdr);
-        __u32 tcp_csum_off = tcp_off + offsetof(struct tcphdr, check);
-        __u8  new_doff     = (TCP_HDR_LEN + new_opts_len) / 4;
 
         // IPv6 has no L3 checksum: just write hop_limit.
         bpf_skb_store_bytes(skb, ip6_off + offsetof(struct ipv6hdr, hop_limit),
@@ -306,31 +323,15 @@ int syn_rewrite(struct __sk_buff *skb) {
             bpf_skb_store_bytes(skb, tcp_off + 12, &doffres_new, 1, 0);
         }
 
-        // TCP options.
-        if (cur_opts_len > 0 || new_opts_len > 0) {
-            __u8 new_opts[TCP_OPTIONS_MAX] = {};
-            #pragma unroll
-            for (int i = 0; i < TCP_OPTIONS_MAX; i++) {
-                new_opts[i] = (i < (int)new_opts_len) ? p->options[i] : 0;
-            }
-            __s64 csum_delta = bpf_csum_diff((__be32 *)old_opts, TCP_OPTIONS_MAX,
-                                             (__be32 *)new_opts, TCP_OPTIONS_MAX,
-                                             0);
-            if (csum_delta < 0)
+        // Write new options bytes.
+        #pragma unroll
+        for (__u32 i = 0; i < TCP_OPTIONS_MAX / 4; i++) {
+            __u32 byte_off = i * 4;
+            if (byte_off >= new_opts_len)
+                break;
+            if (bpf_skb_store_bytes(skb, opts_off + byte_off,
+                                    &p->options[byte_off], 4, 0) < 0)
                 return TC_ACT_OK;
-            bpf_l4_csum_replace(skb, tcp_csum_off, 0, (__u32)csum_delta, 0);
-
-            #pragma unroll
-            for (__u32 i = 0; i < TCP_OPTIONS_MAX / 4; i++) {
-                __u32 byte_off = i * 4;
-                if (byte_off >= new_opts_len)
-                    break;
-                __u32 chunk;
-                __builtin_memcpy(&chunk, &p->options[byte_off], 4);
-                if (bpf_skb_store_bytes(skb, tcp_off + TCP_HDR_LEN + byte_off,
-                                        &chunk, 4, 0) < 0)
-                    return TC_ACT_OK;
-            }
         }
 
         return TC_ACT_OK;
