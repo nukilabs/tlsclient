@@ -20,18 +20,17 @@ import (
 
 type Client struct {
 	http.Client
-	profile    profiles.ClientProfile
-	pinner     *Pinner
-	tracker    bandwidth.Tracker
-	proxyVal   any
-	preHooks   []PreHook
-	postHooks  []PostHook
-	inPreHook  atomic.Bool
-	inPostHook atomic.Bool
-	redirect   func(req *http.Request, via []*http.Request) error
-	tlsConf    *tls.Config
-	quicConf   *quic.Config
-	opts       *TransportOptions
+	profile   profiles.ClientProfile
+	pinner    *Pinner
+	tracker   bandwidth.Tracker
+	proxyVal  any
+	preHooks  []PreHook
+	postHooks []PostHook
+	inHook    atomic.Bool
+	redirect  func(req *http.Request, via []*http.Request) error
+	tlsConf   *tls.Config
+	quicConf  *quic.Config
+	opts      *TransportOptions
 
 	AutoDecompress bool
 }
@@ -199,32 +198,24 @@ func (c *Client) SetFollowRedirects(follow bool) {
 	}
 }
 
-func (c *Client) SetInPreHook(b bool) {
-	c.inPreHook.Store(b)
+func (c *Client) SetInHook(b bool) {
+	c.inHook.Store(b)
 }
 
-func (c *Client) SetInPostHook(b bool) {
-	c.inPostHook.Store(b)
-}
-
-func (c *Client) IsInPreHook() bool {
-	return c.inPreHook.Load()
-}
-
-func (c *Client) IsInPostHook() bool {
-	return c.inPostHook.Load()
+func (c *Client) IsInHook() bool {
+	return c.inHook.Load()
 }
 
 func (c *Client) ResetInHook() {
-	c.inPostHook.Store(false)
+	c.inHook.Store(false)
 }
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	var err error
 	for _, hook := range c.preHooks {
-		if c.inPreHook.CompareAndSwap(false, true) {
+		if c.inHook.CompareAndSwap(false, true) {
 			req, err = hook(c, req)
-			c.inPreHook.Store(false)
+			c.inHook.Store(false)
 			if err != nil {
 				return nil, err
 			}
@@ -238,9 +229,9 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		DecompressBody(res)
 	}
 	for _, hook := range c.postHooks {
-		if c.inPostHook.CompareAndSwap(false, true) {
+		if c.inHook.CompareAndSwap(false, true) {
 			res, err = hook(c, req, res)
-			c.inPostHook.Store(false)
+			c.inHook.Store(false)
 			if err != nil {
 				return nil, err
 			}
