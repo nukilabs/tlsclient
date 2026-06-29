@@ -26,6 +26,7 @@ type Client struct {
 	proxyVal   any
 	preHooks   []PreHook
 	postHooks  []PostHook
+	inPreHook  atomic.Bool
 	inPostHook atomic.Bool
 	redirect   func(req *http.Request, via []*http.Request) error
 	tlsConf    *tls.Config
@@ -198,6 +199,22 @@ func (c *Client) SetFollowRedirects(follow bool) {
 	}
 }
 
+func (c *Client) SetInPreHook(b bool) {
+	c.inPreHook.Store(b)
+}
+
+func (c *Client) SetInPostHook(b bool) {
+	c.inPostHook.Store(b)
+}
+
+func (c *Client) IsInPreHook() bool {
+	return c.inPreHook.Load()
+}
+
+func (c *Client) IsInPostHook() bool {
+	return c.inPostHook.Load()
+}
+
 func (c *Client) ResetInHook() {
 	c.inPostHook.Store(false)
 }
@@ -205,9 +222,12 @@ func (c *Client) ResetInHook() {
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	var err error
 	for _, hook := range c.preHooks {
-		req, err = hook(c, req)
-		if err != nil {
-			return nil, err
+		if c.inPreHook.CompareAndSwap(false, true) {
+			req, err = hook(c, req)
+			c.inPreHook.Store(false)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	res, err := c.Client.Do(req)
