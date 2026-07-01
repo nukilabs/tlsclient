@@ -10,7 +10,6 @@ A powerful Go HTTP client library that provides advanced TLS fingerprinting capa
 - 🚀 **HTTP Protocol Support**: HTTP/1.1, HTTP/2, and HTTP/3
 - 🗜️ **Automatic Decompression**: Built-in support for gzip, brotli, zstd, and deflate
 - 🪝 **Hooks**: Pre-request and post-request hooks for request/response manipulation
-- 🔄 **Smart Redirects**: Configurable redirect handling with custom policies
 - 📊 **Bandwidth Tracking**: Monitor network usage and performance
 - 🎯 **Certificate Pinning**: Enhanced security with certificate validation
 - 🌍 **Proxy Support**: HTTP, HTTPS, and SOCKS proxy support
@@ -36,13 +35,11 @@ import (
     "github.com/nukilabs/http"
     "github.com/nukilabs/tlsclient"
     "github.com/nukilabs/tlsclient/profiles"
-    "github.com/nukilabs/tlsclient/redirects"
 )
 
 func main() {
     // Create a new client with Chrome profile
     client := tlsclient.New(profiles.Chrome138)
-    client.SetRedirectFunc(redirects.Chrome) // Use Chrome's redirect policy
     client.SetProxy(&url.URL{
         Scheme: "http",
         Host:   "localhost:8888",
@@ -177,12 +174,6 @@ client.SetRedirectFunc(func(req *http.Request, via []*http.Request) error {
     
     return nil
 })
-```
-
-### Built-in Redirect Policies
-
-```go
-client.SetRedirectFunc(redirects.Chrome) // Use Chrome's redirect policy
 ```
 
 ## Proxy Support
@@ -341,37 +332,6 @@ We're always looking to expand our browser and device emulation capabilities. If
 - Brave
 - Mobile browsers (iOS Safari, Chrome Mobile, Samsung Internet)
 - HTTP clients (curl, wget, Python requests, etc.)
-
-### 🔄 Redirect Functions
-
-Different browsers handle redirects in unique ways. We're building a comprehensive library of redirect behaviors!
-
-**How to contribute redirect functions:**
-
-1. **Study browser behavior** by testing how your target browser handles:
-   - Different redirect status codes (301, 302, 303, 307, 308)
-   - Cross-origin redirects
-   - Protocol changes (HTTP to HTTPS)
-   - Maximum redirect limits
-   - Header preservation during redirects
-
-2. **Implement the function** in `/redirects/`:
-   ```go
-   // redirects/newbrowser.go
-   func NewBrowser(req *http.Request, via []*http.Request) error {
-       // Implement browser-specific redirect logic
-       if len(via) >= 20 { // Browser's max redirect limit
-           return errors.New("too many redirects")
-       }
-       
-       // Add any browser-specific redirect handling
-       return nil
-   }
-   ```
-
-3. **Add comprehensive tests** to verify the redirect behavior matches the real browser
-
-4. **Document the behavior** with comments explaining the browser's specific quirks
 
 We appreciate all contributions, no matter how small! 🙏
 
