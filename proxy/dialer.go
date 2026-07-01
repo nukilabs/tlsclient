@@ -3,6 +3,7 @@ package proxy
 import (
 	"net"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,6 +35,17 @@ type opAddr string
 
 func (a opAddr) Network() string { return "" }
 func (a opAddr) String() string  { return string(a) }
+
+// unescapeBraces restores the RFC 6570 template braces that url.URL.String()
+// percent-encodes when they appear in the path (e.g. {target_host} becomes
+// %7Btarget_host%7D). Without this, uritemplate can't recognize the variables
+// and expansion leaves the placeholders literal. Braces in the query are left
+// untouched by String(), so this is a no-op for query-form templates.
+var braceUnescaper = strings.NewReplacer("%7B", "{", "%7b", "{", "%7D", "}", "%7d", "}")
+
+func unescapeBraces(raw string) string {
+	return braceUnescaper.Replace(raw)
+}
 
 func (d *Dialer) expandTemplate(addr string) (*url.URL, error) {
 	host, port, err := net.SplitHostPort(addr)

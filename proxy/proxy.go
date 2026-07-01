@@ -39,10 +39,14 @@ func New(proxyURL *url.URL, timeout time.Duration, tlsConf *tls.Config) (Context
 			data := []byte(proxyURL.User.String())
 			authHeader = "Basic " + base64.StdEncoding.EncodeToString(data)
 		}
+		template, err := uritemplate.New(unescapeBraces(proxyURL.String()))
+		if err != nil {
+			return nil, err
+		}
 		return &Dialer{
 			proxyURL:   proxyURL,
 			authHeader: authHeader,
-			template:   uritemplate.MustNew(proxyURL.String()),
+			template:   template,
 			timeout:    timeout,
 			tlsConf:    tlsConf,
 		}, nil

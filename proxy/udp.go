@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strings"
 
 	"github.com/nukilabs/http"
 	"github.com/nukilabs/quic-go"
@@ -87,6 +86,14 @@ func (d *Dialer) ListenPacket(ctx context.Context, network, addr string) (net.Pa
 }
 
 func (d *Dialer) SupportHTTP3() bool {
-	raw := d.proxyURL.String()
-	return strings.Contains(raw, uriTemplateTargetHost) && strings.Contains(raw, uriTemplateTargetPort)
+	var host, port bool
+	for _, name := range d.template.Varnames() {
+		switch name {
+		case uriTemplateTargetHost:
+			host = true
+		case uriTemplateTargetPort:
+			port = true
+		}
+	}
+	return host && port
 }
