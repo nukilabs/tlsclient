@@ -3,6 +3,7 @@ package tlsclient
 import (
 	"time"
 
+	"github.com/nukilabs/http"
 	"github.com/nukilabs/quic-go"
 	"github.com/nukilabs/tlsclient/bandwidth"
 	tls "github.com/nukilabs/utls"
@@ -27,6 +28,12 @@ func WithAutoPinning() Option {
 func WithNoAutoDecompress() Option {
 	return func(c *Client) {
 		c.AutoDecompress = false
+	}
+}
+
+func WithCookieJar(jar http.CookieJar) Option {
+	return func(c *Client) {
+		c.Client.Jar = jar
 	}
 }
 
