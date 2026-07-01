@@ -60,3 +60,37 @@ func TestChrome133(t *testing.T) {
 		t.Errorf("Expected akamai hash 52d84b11737d980aef856699f885ca86, got %s", data2.AkamaiHash)
 	}
 }
+
+func TestChrome150(t *testing.T) {
+	c := tlsclient.New(profiles.Chrome150)
+	res1, err := c.Get("https://tls.peet.ws/api/clean")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res1.Body.Close()
+	var data1 PeetsApiCleanData
+	if err := json.NewDecoder(res1.Body).Decode(&data1); err != nil {
+		t.Fatal(err)
+	}
+	if data1.PeetprintHash != "67c3e9111bed9e7f03d2f21d6d88994b" {
+		t.Errorf("Expected peetprint hash 67c3e9111bed9e7f03d2f21d6d88994b, got %s", data1.PeetprintHash)
+	}
+	if data1.AkamaiHash != "52d84b11737d980aef856699f885ca86" {
+		t.Errorf("Expected akamai hash 52d84b11737d980aef856699f885ca86, got %s", data1.AkamaiHash)
+	}
+	res2, err := c.Get("https://tls.peet.ws/api/clean")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res2.Body.Close()
+	var data2 PeetsApiCleanData
+	if err := json.NewDecoder(res2.Body).Decode(&data2); err != nil {
+		t.Fatal(err)
+	}
+	if data2.PeetprintHash != "35fc5e864929e3b01e9ba9eb41bc1360" {
+		t.Errorf("Expected peetprint hash 35fc5e864929e3b01e9ba9eb41bc1360, got %s", data2.PeetprintHash)
+	}
+	if data2.AkamaiHash != "52d84b11737d980aef856699f885ca86" {
+		t.Errorf("Expected akamai hash 52d84b11737d980aef856699f885ca86, got %s", data2.AkamaiHash)
+	}
+}
