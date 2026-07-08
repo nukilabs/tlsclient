@@ -16,6 +16,7 @@ import (
 	"github.com/nukilabs/tlsclient/profiles"
 	"github.com/nukilabs/tlsclient/proxy"
 	tls "github.com/nukilabs/utls"
+	"golang.org/x/net/publicsuffix"
 )
 
 type Client struct {
@@ -39,7 +40,9 @@ type PreHook func(*Client, *http.Request) (*http.Request, error)
 type PostHook func(*Client, *http.Request, *http.Response) (*http.Response, error)
 
 func New(profile profiles.ClientProfile, options ...Option) *Client {
-	jar, _ := cookiejar.New(nil)
+	jar, _ := cookiejar.New(&cookiejar.Options{
+		PublicSuffixList: publicsuffix.List,
+	})
 	client := &Client{
 		Client: http.Client{
 			Timeout:       30 * time.Second,
@@ -67,7 +70,9 @@ func New(profile profiles.ClientProfile, options ...Option) *Client {
 }
 
 func (c *Client) Clone() *Client {
-	jar, _ := cookiejar.New(nil)
+	jar, _ := cookiejar.New(&cookiejar.Options{
+		PublicSuffixList: publicsuffix.List,
+	})
 
 	clone := &Client{
 		Client: http.Client{
