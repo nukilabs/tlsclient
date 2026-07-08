@@ -167,6 +167,14 @@ func (c *Client) GetCookies(u *url.URL) []*http.Cookie {
 	return c.Client.Jar.Cookies(u)
 }
 
+func (c *Client) GetSiteCookies(u *url.URL) []*http.Cookie {
+	jar, ok := c.Client.Jar.(http.SiteCookieJar)
+	if !ok {
+		return nil
+	}
+	return jar.SiteCookies(u)
+}
+
 func (c *Client) SetCookies(u *url.URL, cookies []*http.Cookie) {
 	c.Client.Jar.SetCookies(u, cookies)
 }
