@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"net"
 	"net/url"
 	"strings"
@@ -25,10 +26,30 @@ type Dialer struct {
 	h2Conn       net.Conn
 	h2ClientConn *http2.ClientConn
 
-	h3DialOnce   sync.Once
-	h3DialErr    error
+	h3DialLock   sync.Mutex
 	h3Conn       *quic.Conn
 	h3ClientConn *http3.ClientConn
+}
+
+var (
+	// noDeadline is the zero time, used to clear deadlines once
+	// connection establishment has completed.
+	noDeadline = time.Time{}
+	// aLongTimeAgo is a non-zero time far in the past, used for immediate
+	// deadlines when the dial context is canceled.
+	aLongTimeAgo = time.Unix(1, 0)
+)
+
+// deadline returns the earliest of the context's deadline and
+// now plus the dialer's timeout.
+func (d *Dialer) deadline(ctx context.Context) (time.Time, bool) {
+	deadline, ok := ctx.Deadline()
+	if d.timeout > 0 {
+		if t := time.Now().Add(d.timeout); !ok || t.Before(deadline) {
+			return t, true
+		}
+	}
+	return deadline, ok
 }
 
 type opAddr string

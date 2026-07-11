@@ -32,7 +32,12 @@ func New(proxyURL *url.URL, timeout time.Duration, tlsConf *tls.Config) (Context
 		}
 		return Direct(ip, timeout), nil
 	case "socks5", "socks5h":
-		return socks.NewDialer(proxyURL)
+		dialer, err := socks.NewDialer(proxyURL)
+		if err != nil {
+			return nil, err
+		}
+		dialer.Timeout = timeout
+		return dialer, nil
 	case "http", "https":
 		var authHeader string
 		if proxyURL.User != nil {
