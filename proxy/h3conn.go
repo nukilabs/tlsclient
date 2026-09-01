@@ -186,8 +186,9 @@ func (c *h3Conn) SetWriteBuffer(bytes int) error {
 }
 
 func skipCapsules(str quicvarint.Reader) error {
+	p := http3.NewCapsuleParser(str)
 	for {
-		_, r, err := http3.ParseCapsule(str)
+		_, r, err := p.Next()
 		if err != nil {
 			return err
 		}
