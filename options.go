@@ -15,6 +15,14 @@ type TransportOptions struct {
 	DisableIPV4       bool
 	DisableIPV6       bool
 	DisableHTTP3      bool
+	// ForceHTTP3 routes every https request over HTTP/3 with no TCP fallback,
+	// instead of waiting for an Alt-Svc hint. It has no effect when HTTP/3 is
+	// unavailable (no h3 profile, DisableHTTP3, or a dialer without h3 support).
+	ForceHTTP3 bool
+	// HTTP3RaceDelay is the head start given to a QUIC connection before a
+	// request that has an Alt-Svc h3 hint falls back to TCP. Zero uses the
+	// default (300ms), matching Chrome's alternative-service race.
+	HTTP3RaceDelay time.Duration
 }
 
 type Option func(*Client)

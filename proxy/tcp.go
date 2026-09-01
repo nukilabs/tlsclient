@@ -27,18 +27,17 @@ func (d *Dialer) DialContext(ctx context.Context, network, addr string) (net.Con
 		req.Header.Set("Proxy-Authorization", d.authHeader)
 	}
 
+	// Reuse an existing HTTP/2 session to the proxy when possible.
 	d.h2DialLock.Lock()
-	if d.h2ClientConn != nil {
-		if d.h2ClientConn.CanTakeNewRequest() {
-			d.h2DialLock.Unlock()
-			c, err := d.connectHttp2(ctx, req, d.h2Conn, d.h2ClientConn)
-			if err != nil {
-				return nil, &net.OpError{Op: "connect", Net: network, Source: proxy, Addr: dst, Err: err}
-			}
-			return c, nil
-		}
-	}
+	h2Conn, h2ClientConn := d.h2Conn, d.h2ClientConn
 	d.h2DialLock.Unlock()
+	if h2ClientConn != nil && h2ClientConn.CanTakeNewRequest() {
+		c, err := d.connectHttp2(ctx, req, h2Conn, h2ClientConn)
+		if err != nil {
+			return nil, &net.OpError{Op: "connect", Net: network, Source: proxy, Addr: dst, Err: err}
+		}
+		return c, nil
+	}
 
 	switch d.proxyURL.Scheme {
 	case "http":
@@ -86,17 +85,16 @@ func (d *Dialer) DialContext(ctx context.Context, network, addr string) (net.Con
 			}
 			return c, nil
 		case "h2":
-			d.h2DialLock.Lock()
-			defer d.h2DialLock.Unlock()
-
 			tr := &http2.Transport{}
 			clientConn, err := tr.NewClientConn(conn)
 			if err != nil {
 				conn.Close()
 				return nil, &net.OpError{Op: "connect", Net: network, Source: proxy, Addr: dst, Err: fmt.Errorf("dialing h2 client connection failed: %w", err)}
 			}
+			d.h2DialLock.Lock()
 			d.h2Conn = conn
 			d.h2ClientConn = clientConn
+			d.h2DialLock.Unlock()
 
 			c, err := d.connectHttp2(ctx, req, conn, clientConn)
 			if err != nil {
@@ -140,9 +138,12 @@ func (d *Dialer) connectHttp1(ctx context.Context, req *http.Request, conn net.C
 	return conn, nil
 }
 
+// connectHttp2 opens a CONNECT stream on the shared HTTP/2 session. It never
+// closes the session conn itself: other tunnels may be multiplexed over it,
+// and a dead session is detected via CanTakeNewRequest on the next dial.
 func (d *Dialer) connectHttp2(ctx context.Context, req *http.Request, conn net.Conn, clientConn *http2.ClientConn) (net.Conn, error) {
-	pr, pw := net.Pipe()
-	req.Body = pr
+	upR, upW := net.Pipe()
+	req.Body = upR
 
 	streamCtx, cancel := context.WithCancel(context.Background())
 	defer context.AfterFunc(ctx, cancel)()
@@ -153,13 +154,15 @@ func (d *Dialer) connectHttp2(ctx context.Context, req *http.Request, conn net.C
 	res, err := clientConn.RoundTrip(req.WithContext(streamCtx))
 	if err != nil {
 		cancel()
-		conn.Close()
+		upW.Close()
 		return nil, fmt.Errorf("failed to round trip request: %w", err)
 	}
 	if res.StatusCode < 200 || res.StatusCode > 299 {
 		cancel()
+		upW.Close()
+		res.Body.Close()
 		return nil, fmt.Errorf("server responded with %d", res.StatusCode)
 	}
 
-	return newH2Conn(conn, pw, res.Body), nil
+	return newH2Conn(conn, upW, res.Body, cancel), nil
 }

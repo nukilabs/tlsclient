@@ -11,7 +11,11 @@ type PeetsApiCleanData struct {
 
 type H3ImpersonateData struct {
 	HTTP3 struct {
-		PerkText string `json:"perk_text"`
-		PerkHash string `json:"perk_hash"`
+		Settings []struct {
+			ID    int    `json:"id"`
+			Name  string `json:"name"`
+			Value int    `json:"value"`
+		} `json:"settings"`
+		HeaderOrder []string `json:"header_order"`
 	} `json:"http3"`
 }

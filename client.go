@@ -127,6 +127,9 @@ func (c *Client) SetProxy(v any) error {
 	}
 
 	c.proxyVal = v
+	if old, ok := c.Transport.(*RoundTripper); ok {
+		old.CloseIdleConnections()
+	}
 	c.Transport = NewRoundTripper(c.profile, dialer, c.pinner, c.tracker, c.tlsConf, c.quicConf, c.opts)
 	return nil
 }

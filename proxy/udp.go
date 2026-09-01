@@ -81,15 +81,18 @@ func (d *Dialer) ListenPacket(ctx context.Context, network, addr string) (net.Pa
 		}
 	}
 	defer context.AfterFunc(ctx, func() { rstr.SetDeadline(aLongTimeAgo) })()
+	hdr := http.Header{
+		http3.CapsuleProtocolHeader: {"?1"},
+	}
+	if d.authHeader != "" {
+		hdr.Set("Proxy-Authorization", d.authHeader)
+	}
 	if err := rstr.SendRequestHeader(&http.Request{
 		Method: http.MethodConnect,
 		Proto:  "connect-udp",
 		Host:   u.Host,
-		Header: http.Header{
-			http3.CapsuleProtocolHeader: {"?1"},
-			"Proxy-Authorization":       {d.authHeader},
-		},
-		URL: u,
+		Header: hdr,
+		URL:    u,
 	}); err != nil {
 		return nil, &net.OpError{Op: "listen", Net: network, Source: proxy, Addr: dst, Err: fmt.Errorf("failed to send request: %w", err)}
 	}

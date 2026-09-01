@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"sync"
@@ -62,9 +61,7 @@ func newH3Conn(str http3Stream, local net.Addr) *h3Conn {
 	c.readCtx, c.readCtxCancel = context.WithCancel(context.Background())
 	go func() {
 		defer close(c.readDone)
-		if err := skipCapsules(quicvarint.NewReader(str)); err != io.EOF && !c.closed.Load() {
-			log.Printf("reading from request stream failed: %v", err)
-		}
+		skipCapsules(quicvarint.NewReader(str))
 		str.Close()
 	}()
 	return c
@@ -190,11 +187,10 @@ func (c *h3Conn) SetWriteBuffer(bytes int) error {
 
 func skipCapsules(str quicvarint.Reader) error {
 	for {
-		ct, r, err := http3.ParseCapsule(str)
+		_, r, err := http3.ParseCapsule(str)
 		if err != nil {
 			return err
 		}
-		log.Printf("skipping capsule of type %d", ct)
 		if _, err := io.Copy(io.Discard, r); err != nil {
 			return err
 		}

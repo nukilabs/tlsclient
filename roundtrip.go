@@ -2,11 +2,10 @@ package tlsclient
 
 import (
 	"context"
+	"crypto/x509"
+	"errors"
 	"fmt"
 	"net"
-	"slices"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/nukilabs/http"
@@ -19,8 +18,20 @@ import (
 	tls "github.com/nukilabs/utls"
 )
 
+// RoundTripper routes requests to one of three transports:
+//
+//   - t1 serves HTTP/1.1 and cleartext requests. Its TLS dials go through
+//     dialTLSContext, which performs the fingerprinted uTLS handshake. When a
+//     connection negotiates "h2" via ALPN, t1 hands it off to t2 through
+//     TLSNextProto, so the protocol is decided per connection at handshake
+//     time and a host may switch protocols between reconnects.
+//   - t2 is the fingerprinted HTTP/2 transport fed by t1's handoff. It never
+//     dials on its own.
+//   - HTTP/3 is handled by the racer, used when HTTP/3 is requested explicitly
+//     or advertised by the host via Alt-Svc. Unlike t1/t2 it is independent: it
+//     dials its own QUIC connections and shares nothing. The racer is nil when
+//     HTTP/3 is unavailable (no h3 profile, disabled, or the dialer can't).
 type RoundTripper struct {
-	sync.Mutex
 	profile profiles.ClientProfile
 	dialer  proxy.ContextDialer
 	pinner  *Pinner
@@ -30,22 +41,12 @@ type RoundTripper struct {
 	quicConf *quic.Config
 
 	clientSessionCache tls.ClientSessionCache
-	disableKeepAlives  bool
-	idleConnTimeout    time.Duration
 	disableIPV4        bool
 	disableIPV6        bool
-	disableHTTP3       bool
 
-	maxUploadBufferPerConnection int32
-	maxReadFrameSize             uint32
-	maxHeaderListSize            uint32
-	maxHeaderTableSize           uint32
-
-	transportLock sync.Mutex
-	transports    map[string]http.RoundTripper
-	connections   map[string]net.Conn
-
-	altsvc sync.Map
+	t1    *http.Transport
+	t2    *http2.Transport
+	racer *racer
 }
 
 func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer, pinner *Pinner, tracker bandwidth.Tracker, tlsConf *tls.Config, quicConf *quic.Config, opts *TransportOptions) *RoundTripper {
@@ -53,43 +54,26 @@ func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer,
 	if supportsSessionResumption(profile.ClientHelloSpec()) {
 		clientSessionCache = tls.NewLRUClientSessionCache(32)
 	}
+
 	var disableKeepAlives bool
-	var idleConnTimeout time.Duration = 90 * time.Second
-	var disableIPV4, disableIPV6, disableHTTP3 bool
+	idleConnTimeout := 90 * time.Second
+	h3RaceDelay := defaultH3RaceDelay
+	var disableIPV4, disableIPV6, disableHTTP3, forceHTTP3 bool
 	if opts != nil {
 		disableKeepAlives = opts.DisableKeepAlives
 		if opts.IdleConnTimeout != 0 {
 			idleConnTimeout = opts.IdleConnTimeout
 		}
+		if opts.HTTP3RaceDelay != 0 {
+			h3RaceDelay = opts.HTTP3RaceDelay
+		}
 		disableIPV4 = opts.DisableIPV4
 		disableIPV6 = opts.DisableIPV6
 		disableHTTP3 = opts.DisableHTTP3
-	}
-	var maxHeaderTableSize, maxReadFrameSize, maxHeaderListSize uint32
-	if profile.H2 != nil {
-		if idx := slices.IndexFunc(profile.H2.Settings, func(s http2.Setting) bool {
-			return s.ID == http2.SettingHeaderTableSize
-		}); idx != -1 {
-			maxHeaderListSize = profile.H2.Settings[idx].Val
-		}
-		if idx := slices.IndexFunc(profile.H2.Settings, func(s http2.Setting) bool {
-			return s.ID == http2.SettingMaxFrameSize
-		}); idx != -1 {
-			maxReadFrameSize = profile.H2.Settings[idx].Val
-		}
-		if idx := slices.IndexFunc(profile.H2.Settings, func(s http2.Setting) bool {
-			return s.ID == http2.SettingMaxHeaderListSize
-		}); idx != -1 {
-			maxHeaderTableSize = profile.H2.Settings[idx].Val
-		}
+		forceHTTP3 = opts.ForceHTTP3
 	}
 
-	var maxUploadBufferPerConnection int32
-	if profile.H2 != nil {
-		maxUploadBufferPerConnection = int32(profile.H2.ConnectionFlow)
-	}
-
-	return &RoundTripper{
+	rt := &RoundTripper{
 		profile: profile,
 		dialer:  dialer,
 		pinner:  pinner,
@@ -99,43 +83,81 @@ func NewRoundTripper(profile profiles.ClientProfile, dialer proxy.ContextDialer,
 		quicConf: quicConf,
 
 		clientSessionCache: clientSessionCache,
-		disableKeepAlives:  disableKeepAlives,
-		idleConnTimeout:    idleConnTimeout,
 		disableIPV4:        disableIPV4,
 		disableIPV6:        disableIPV6,
-		disableHTTP3:       disableHTTP3,
-
-		maxUploadBufferPerConnection: maxUploadBufferPerConnection,
-		maxReadFrameSize:             maxReadFrameSize,
-		maxHeaderListSize:            maxHeaderListSize,
-		maxHeaderTableSize:           maxHeaderTableSize,
-
-		transports:  make(map[string]http.RoundTripper),
-		connections: make(map[string]net.Conn),
 	}
+
+	rt.t1 = &http.Transport{
+		DialContext:         rt.dialContext,
+		DialTLSContext:      rt.dialTLSContext,
+		DisableCompression:  true,
+		DisableKeepAlives:   disableKeepAlives,
+		IdleConnTimeout:     idleConnTimeout,
+		MaxIdleConnsPerHost: 6,
+	}
+
+	if profile.H2 != nil {
+		if t2, err := http2.ConfigureTransports(rt.t1); err == nil {
+			t2.DisableCompression = true
+			t2.IdleConnTimeout = idleConnTimeout
+			t2.MaxUploadBufferPerConnection = int32(profile.H2.ConnectionFlow)
+			t2.Settings = profile.H2.Settings
+			t2.Priorities = profile.H2.Priorities
+			t2.HeaderPriority = profile.H2.HeaderPriority
+			t2.PseudoHeaderOrder = profile.PseudoHeaderOrder
+			t2.ReadIdleTimeout = profile.H2.ReadIdleTimeout
+			t2.InflowTimeout = profile.H2.InflowTimeout
+			t2.PrefacePing = profile.H2.PrefacePing
+			for _, s := range profile.H2.Settings {
+				switch s.ID {
+				case http2.SettingHeaderTableSize:
+					t2.MaxDecoderHeaderTableSize = s.Val
+				case http2.SettingMaxFrameSize:
+					t2.MaxReadFrameSize = s.Val
+				case http2.SettingMaxHeaderListSize:
+					t2.MaxHeaderListSize = s.Val
+				}
+			}
+			rt.t2 = t2
+		}
+	}
+
+	if profile.H3 != nil && !disableHTTP3 && dialer.SupportHTTP3() {
+		settings := make(map[uint64]uint64, len(profile.H3.Settings))
+		order := make([]uint64, 0, len(profile.H3.Settings))
+		for _, setting := range profile.H3.Settings {
+			settings[setting.ID] = setting.Val
+			order = append(order, setting.ID)
+		}
+		h3TLSConf := tlsConf.Clone()
+		h3TLSConf.ClientSessionCache = clientSessionCache
+		h3TLSConf.OmitEmptyPsk = true
+		h3QUICConf := quicConf.Clone()
+		h3QUICConf.MaxIdleTimeout = idleConnTimeout
+		h3QUICConf.EnableDatagrams = true
+		t3 := &http3.Transport{
+			DisableCompression:      true,
+			TLSClientConfig:         h3TLSConf,
+			QUICConfig:              h3QUICConf,
+			AdditionalSettings:      settings,
+			AdditionalSettingsOrder: order,
+			PseudoHeaderOrder:       profile.PseudoHeaderOrder,
+			Dial:                    rt.dialQuic,
+			EnableDatagrams:         true,
+		}
+		rt.racer = newRacer(t3, rt.dialQuic, h3RaceDelay, forceHTTP3)
+	}
+
+	return rt
 }
 
 func (rt *RoundTripper) CloseIdleConnections() {
-	rt.transportLock.Lock()
-	defer rt.transportLock.Unlock()
-
-	for addr, transport := range rt.transports {
-		if t, ok := transport.(*http3.Transport); ok {
-			t.CloseIdleConnections()
-		} else if t, ok := transport.(*http2.Transport); ok {
-			t.CloseIdleConnections()
-		} else if t, ok := transport.(*http.Transport); ok {
-			t.CloseIdleConnections()
-		}
-		delete(rt.transports, addr)
+	rt.t1.CloseIdleConnections()
+	if rt.t2 != nil {
+		rt.t2.CloseIdleConnections()
 	}
-
-	rt.Lock()
-	defer rt.Unlock()
-
-	for addr, conn := range rt.connections {
-		conn.Close()
-		delete(rt.connections, addr)
+	if rt.racer != nil {
+		rt.racer.close()
 	}
 }
 
@@ -150,180 +172,95 @@ func (rt *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 			port = "443"
 		}
 	}
+	switch req.URL.Scheme {
+	case "http", "https":
+	default:
+		return nil, fmt.Errorf("unsupported scheme: %s", req.URL.Scheme)
+	}
 	addr := net.JoinHostPort(host, port)
 
-	transport, err := rt.getTransport(req.Context(), req.Proto, req.URL.Scheme, addr)
+	if rt.racer != nil && req.URL.Scheme == "https" {
+		res, err := rt.roundTripHTTP3(req, addr)
+		if !errors.Is(err, errUseTCP) {
+			return res, err
+		}
+		// h3 was declined before the request was sent: fall through to TCP with
+		// the original, untouched request.
+	}
+
+	res, err := rt.t1.RoundTrip(req)
 	if err != nil {
 		return nil, err
 	}
-
-	res, err := transport.RoundTrip(req)
-	if err != nil {
-		return nil, err
+	if rt.racer != nil {
+		rt.racer.recordAltSvc(addr, res.Header.Get("Alt-Svc"))
 	}
-
-	altsvc := res.Header.Get("Alt-Svc")
-	if strings.HasPrefix(altsvc, "h3") {
-		rt.altsvc.Store(addr, true)
-	}
-
 	return res, nil
 }
 
-func (rt *RoundTripper) forceHTTP3(proto, addr string) bool {
-	if rt.profile.H3 == nil || rt.disableHTTP3 || !rt.dialer.SupportHTTP3() {
-		return false
+// roundTripHTTP3 serves the request over an HTTP/3 connection from the racer. It
+// returns errUseTCP when HTTP/3 was declined before the request was sent and the
+// caller should fall back to TCP; any other error is a genuine, committed
+// round-trip failure.
+func (rt *RoundTripper) roundTripHTTP3(req *http.Request, addr string) (*http.Response, error) {
+	cc, err := rt.racer.connection(req, addr)
+	if err != nil {
+		return nil, err
 	}
-	if _, ok := rt.altsvc.Load(addr); ok {
-		return true
+	res, err := cc.RoundTrip(req)
+	if err != nil {
+		rt.racer.forget(addr, cc)
+		return nil, err
 	}
-	if len(rt.tlsConf.NextProtos) == 1 && rt.tlsConf.NextProtos[0] == http3.NextProtoH3 {
-		return true
-	}
-	if strings.EqualFold(proto, "HTTP/3.0") || strings.EqualFold(proto, "h3") {
-		return true
-	}
-	return false
+	rt.racer.recordAltSvc(addr, res.Header.Get("Alt-Svc"))
+	return res, nil
 }
 
-func (rt *RoundTripper) getTransport(ctx context.Context, proto, scheme, addr string) (http.RoundTripper, error) {
-	rt.transportLock.Lock()
-	defer rt.transportLock.Unlock()
-
-	if rt.forceHTTP3(proto, addr) {
-		if t, ok := rt.transports[addr]; ok {
-			if _, ok := t.(*http3.Transport); ok {
-				return t, nil
-			}
+// restrict narrows "tcp"/"udp" to a single address family when one is
+// disabled.
+func (rt *RoundTripper) restrict(network string) string {
+	switch network {
+	case "tcp", "udp":
+		if rt.disableIPV6 {
+			return network + "4"
 		}
-		rt.transports[addr] = rt.buildHttp3Transport()
-		return rt.transports[addr], nil
-	}
-
-	if t, ok := rt.transports[addr]; ok {
-		return t, nil
-	}
-
-	switch scheme {
-	case "http":
-		rt.transports[addr] = rt.buildHttp1Transport()
-	case "https":
-		if _, err := rt.dialTLSContext(ctx, "tcp", addr); err != nil {
-			return nil, err
+		if rt.disableIPV4 {
+			return network + "6"
 		}
-	default:
-		return nil, fmt.Errorf("unsupported scheme: %s", scheme)
 	}
-	return rt.transports[addr], nil
-}
-
-func (rt *RoundTripper) buildHttp1Transport() http.RoundTripper {
-	tlsConf := rt.tlsConf.Clone()
-	tlsConf.ClientSessionCache = rt.clientSessionCache
-	tlsConf.OmitEmptyPsk = true
-	return &http.Transport{
-		DialContext:        rt.dialContext,
-		DialTLSContext:     rt.dialTLSContext,
-		DisableCompression: true,
-		TLSClientConfig:    tlsConf,
-		DisableKeepAlives:  rt.disableKeepAlives,
-		IdleConnTimeout:    rt.idleConnTimeout,
-	}
-}
-
-func (rt *RoundTripper) buildHttp2Transport() http.RoundTripper {
-	tlsConf := rt.tlsConf.Clone()
-	tlsConf.ClientSessionCache = rt.clientSessionCache
-	tlsConf.OmitEmptyPsk = true
-	return &http2.Transport{
-		DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
-			return rt.dialTLSContext(ctx, network, addr)
-		},
-		DisableCompression:           true,
-		TLSClientConfig:              tlsConf,
-		MaxUploadBufferPerConnection: rt.maxUploadBufferPerConnection,
-		Settings:                     rt.profile.H2.Settings,
-		Priorities:                   rt.profile.H2.Priorities,
-		HeaderPriority:               rt.profile.H2.HeaderPriority,
-		PseudoHeaderOrder:            rt.profile.PseudoHeaderOrder,
-		MaxReadFrameSize:             rt.maxReadFrameSize,
-		MaxHeaderListSize:            rt.maxHeaderListSize,
-		MaxDecoderHeaderTableSize:    rt.maxHeaderTableSize,
-		IdleConnTimeout:              rt.idleConnTimeout,
-		ReadIdleTimeout:              rt.profile.H2.ReadIdleTimeout,
-		InflowTimeout:                rt.profile.H2.InflowTimeout,
-		PrefacePing:                  rt.profile.H2.PrefacePing,
-	}
-}
-
-func (rt *RoundTripper) buildHttp3Transport() http.RoundTripper {
-	settings := make(map[uint64]uint64)
-	order := make([]uint64, 0, len(rt.profile.H3.Settings))
-	for _, setting := range rt.profile.H3.Settings {
-		settings[setting.ID] = setting.Val
-		order = append(order, setting.ID)
-	}
-	tlsConf := rt.tlsConf.Clone()
-	tlsConf.ClientSessionCache = rt.clientSessionCache
-	tlsConf.OmitEmptyPsk = true
-	quicConf := rt.quicConf.Clone()
-	quicConf.MaxIdleTimeout = rt.idleConnTimeout
-	quicConf.EnableDatagrams = true
-	return &http3.Transport{
-		DisableCompression:      true,
-		TLSClientConfig:         tlsConf,
-		QUICConfig:              quicConf,
-		AdditionalSettings:      settings,
-		AdditionalSettingsOrder: order,
-		PseudoHeaderOrder:       rt.profile.PseudoHeaderOrder,
-		Dial:                    rt.dialQuic,
-		EnableDatagrams:         true,
-	}
+	return network
 }
 
 func (rt *RoundTripper) dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	if network == "tcp" && (rt.disableIPV6) {
-		network = "tcp4"
+	conn, err := rt.dialer.DialContext(ctx, rt.restrict(network), addr)
+	if err != nil {
+		return nil, err
 	}
-	return rt.dialer.DialContext(ctx, network, addr)
+	return bandwidth.NewTrackedConn(conn, rt.tracker), nil
 }
 
 func (rt *RoundTripper) dialTLSContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	rt.Lock()
-	defer rt.Unlock()
-
-	if conn := rt.connections[addr]; conn != nil {
-		delete(rt.connections, addr)
-		return conn, nil
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
 	}
 
-	if network == "tcp" && (rt.disableIPV6) {
-		network = "tcp4"
-	}
-	if network == "tcp" && (rt.disableIPV4) {
-		network = "tcp6"
-	}
-
-	rawConn, err := rt.dialer.DialContext(ctx, network, addr)
+	rawConn, err := rt.dialer.DialContext(ctx, rt.restrict(network), addr)
 	if err != nil {
 		return nil, err
 	}
 	rawConn = bandwidth.NewTrackedConn(rawConn, rt.tracker)
 
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, err
-	}
 	tlsConf := rt.tlsConf.Clone()
 	tlsConf.ServerName = host
 	tlsConf.ClientSessionCache = rt.clientSessionCache
 	tlsConf.OmitEmptyPsk = true
+
 	conn := tls.UClient(rawConn, tlsConf, tls.HelloCustom)
 	if err := conn.ApplyPreset(rt.profile.ClientHelloSpec()); err != nil {
 		conn.Close()
 		return nil, err
 	}
-
 	if err := conn.HandshakeContext(ctx); err != nil {
 		conn.Close()
 		return nil, err
@@ -335,22 +272,10 @@ func (rt *RoundTripper) dialTLSContext(ctx context.Context, network, addr string
 		return nil, err
 	}
 
-	if rt.transports[addr] != nil {
-		return conn, nil
-	}
-
-	switch state.NegotiatedProtocol {
-	case http3.NextProtoH3:
-		rt.transports[addr] = rt.buildHttp3Transport()
-	case http2.NextProtoTLS:
-		rt.transports[addr] = rt.buildHttp2Transport()
-	default:
-		rt.transports[addr] = rt.buildHttp1Transport()
-	}
-
-	rt.connections[addr] = conn
-
-	return nil, nil
+	// Return the embedded *tls.Conn: with the handshake complete it behaves
+	// identically to the UConn, and it lets the transport read the negotiated
+	// ALPN protocol and hand h2 connections off through TLSNextProto.
+	return conn.Conn, nil
 }
 
 func (rt *RoundTripper) dialQuic(ctx context.Context, addr string, tlscfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
@@ -359,15 +284,7 @@ func (rt *RoundTripper) dialQuic(ctx context.Context, addr string, tlscfg *tls.C
 		return nil, err
 	}
 
-	network := "udp"
-	if rt.disableIPV6 {
-		network = "udp4"
-	}
-	if rt.disableIPV4 {
-		network = "udp6"
-	}
-
-	pconn, err := rt.dialer.ListenPacket(ctx, network, udpaddr.String())
+	pconn, err := rt.dialer.ListenPacket(ctx, rt.restrict("udp"), udpaddr.String())
 	if err != nil {
 		return nil, err
 	}
@@ -375,6 +292,25 @@ func (rt *RoundTripper) dialQuic(ctx context.Context, addr string, tlscfg *tls.C
 	if err != nil {
 		pconn.Close()
 		return nil, err
+	}
+
+	tlscfg = tlscfg.Clone()
+	verify := tlscfg.VerifyPeerCertificate
+	tlscfg.VerifyPeerCertificate = func(rawCerts [][]byte, chains [][]*x509.Certificate) error {
+		if verify != nil {
+			if err := verify(rawCerts, chains); err != nil {
+				return err
+			}
+		}
+		certs := make([]*x509.Certificate, 0, len(rawCerts))
+		for _, raw := range rawCerts {
+			cert, err := x509.ParseCertificate(raw)
+			if err != nil {
+				return err
+			}
+			certs = append(certs, cert)
+		}
+		return rt.pinner.Pin(certs, addr)
 	}
 
 	cfg = cfg.Clone()
