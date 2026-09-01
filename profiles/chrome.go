@@ -600,9 +600,9 @@ var Chrome150 = ClientProfile{
 				&tls.SessionTicketExtension{},
 				&tls.SupportedPointsExtension{SupportedPoints: []byte{0x00}},
 				&tls.SignatureAlgorithmsExtension{SupportedSignatureAlgorithms: []tls.SignatureScheme{
-					tls.FakeMLDSA44,
-					tls.FakeMLDSA65,
-					tls.FakeMLDSA87,
+					tls.MLDSA44,
+					tls.MLDSA65,
+					tls.MLDSA87,
 					tls.ECDSAWithP256AndSHA256,
 					tls.PSSWithSHA256,
 					tls.PKCS1WithSHA256,
