@@ -1,0 +1,6 @@
+# Normalise line endings to LF everywhere. gofmt and go/format emit LF, and this repo is
+# developed on Windows, Linux and macOS, so a single ending keeps the three in agreement.
+#
+# eol=lf rather than plain text=auto: text=auto alone stores LF but still checks out CRLF on
+# Windows, which leaves gofmt reporting every file as unformatted there.
+* text=auto eol=lf
