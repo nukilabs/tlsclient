@@ -9,7 +9,7 @@ require (
 	github.com/nukilabs/masque-go v1.0.0
 	github.com/nukilabs/quic-go v1.1.0
 	github.com/nukilabs/socks v1.0.1
-	github.com/nukilabs/utls v1.3.1
+	github.com/nukilabs/utls v1.3.2
 	github.com/yosida95/uritemplate/v3 v3.0.2
 	golang.org/x/net v0.58.0
 )
