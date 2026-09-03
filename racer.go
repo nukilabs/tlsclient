@@ -218,14 +218,21 @@ func (r *racer) markFailed(c *h3conn, err error) {
 // forget drops a connection that failed mid-request and closes it. cc is the
 // connection handed out by connection; the entry is only removed if it still
 // holds that same connection.
+//
+// It does not close the connection. HTTP/3 multiplexes many requests over one
+// connection, so closing it here would abort every other in-flight request on
+// it (surfacing to them as H3_NO_ERROR). A dead connection is already closing on
+// its own; a still-live one stays usable for its other streams, so only a dead
+// connection is evicted from the pool for the next request to redial.
 func (r *racer) forget(addr string, cc *http3.ClientConn) {
+	if cc.Context().Err() == nil {
+		return // still alive: an isolated stream failure, keep the connection
+	}
 	r.mu.Lock()
 	if c, ok := r.conns[addr]; ok && c.cc == cc {
 		delete(r.conns, addr)
 	}
 	r.mu.Unlock()
-
-	cc.CloseWithError(quic.ApplicationErrorCode(http3.ErrCodeNoError), "")
 }
 
 // hinted reports whether addr has a live Alt-Svc HTTP/3 hint.
