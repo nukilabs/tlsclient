@@ -77,10 +77,14 @@ func (c *Client) Clone() *Client {
 	clone := &Client{
 		Client: http.Client{
 			Timeout:       c.Client.Timeout,
+			Transport:     c.Client.Transport,
 			Jar:           jar,
 			CheckRedirect: c.Client.CheckRedirect,
 		},
 		profile:        c.profile,
+		proxyVal:       c.proxyVal,
+		preHooks:       append([]PreHook(nil), c.preHooks...),
+		postHooks:      append([]PostHook(nil), c.postHooks...),
 		pinner:         c.pinner,
 		tracker:        c.tracker,
 		redirect:       c.redirect,
@@ -90,8 +94,11 @@ func (c *Client) Clone() *Client {
 		AutoDecompress: c.AutoDecompress,
 	}
 
-	dialer := proxy.Direct(nil, clone.Timeout)
-	clone.Transport = NewRoundTripper(clone.profile, dialer, clone.pinner, clone.tracker, clone.tlsConf, clone.quicConf, clone.opts)
+	// Reuse the configured dialer while keeping a separate origin transport.
+	// A caller-supplied transport is retained above, like other client config.
+	if transport, ok := c.Transport.(*RoundTripper); ok {
+		clone.Transport = NewRoundTripper(clone.profile, transport.dialer, clone.pinner, clone.tracker, clone.tlsConf, clone.quicConf, clone.opts)
+	}
 	return clone
 }
 
