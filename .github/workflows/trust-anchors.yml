@@ -52,6 +52,9 @@ jobs:
           git checkout -b "${branch}"
           git add profiles/trustanchors.go
           git commit -m "chore: refresh Chrome Root Store trust anchors (version_major ${version})"
+          # The checkout only fetches main, so fetch the branch if it already exists; without a
+          # remote-tracking ref --force-with-lease expects the branch to be absent and rejects.
+          git fetch origin "+refs/heads/${branch}:refs/remotes/origin/${branch}" || true
           git push --force-with-lease origin "${branch}"
 
           if [ -n "$(gh pr list --head "${branch}" --state open --json number --jq '.[].number')" ]; then
