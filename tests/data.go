@@ -9,6 +9,19 @@ type PeetsApiCleanData struct {
 	PeetprintHash string `json:"peetprint_hash"`
 }
 
+type PeetsApiAllData struct {
+	TLS struct {
+		PeetprintHash string `json:"peetprint_hash"`
+		Extensions    []struct {
+			Name string `json:"name"`
+			Data string `json:"data"`
+		} `json:"extensions"`
+	} `json:"tls"`
+	HTTP2 struct {
+		AkamaiFingerprintHash string `json:"akamai_fingerprint_hash"`
+	} `json:"http2"`
+}
+
 type H3ImpersonateData struct {
 	HTTP3 struct {
 		Settings []struct {

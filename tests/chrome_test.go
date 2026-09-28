@@ -1,7 +1,11 @@
 package tests
 
 import (
+	"bytes"
+	"encoding/hex"
 	"encoding/json"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/nukilabs/tlsclient"
@@ -127,4 +131,66 @@ func TestChrome152(t *testing.T) {
 	if data2.AkamaiHash != "52d84b11737d980aef856699f885ca86" {
 		t.Errorf("Expected akamai hash 52d84b11737d980aef856699f885ca86, got %s", data2.AkamaiHash)
 	}
+}
+
+func TestChrome154(t *testing.T) {
+	c := tlsclient.New(profiles.Chrome154)
+	// The second request resumes the session, which adds pre_shared_key.
+	peetprints := []string{"fc97c1cdfb1409c9a9326c1b726d1dee", "5fa343c29062ede7d0e28fd46c1052a7"}
+	var first [][]byte
+	for i, peetprint := range peetprints {
+		res, err := c.Get("https://tls.peet.ws/api/all")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var data PeetsApiAllData
+		err = json.NewDecoder(res.Body).Decode(&data)
+		res.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if data.TLS.PeetprintHash != peetprint {
+			t.Errorf("Expected peetprint hash %s, got %s", peetprint, data.TLS.PeetprintHash)
+		}
+		if data.HTTP2.AkamaiFingerprintHash != "52d84b11737d980aef856699f885ca86" {
+			t.Errorf("Expected akamai hash 52d84b11737d980aef856699f885ca86, got %s", data.HTTP2.AkamaiFingerprintHash)
+		}
+		anchors := trustAnchors(t, data)
+		if len(anchors) == 0 {
+			t.Fatal("trust_anchors extension missing")
+		}
+		if !slices.IsSortedFunc(anchors, bytes.Compare) {
+			t.Errorf("Expected trust anchors sorted, got %x", anchors)
+		}
+		if i == 0 {
+			first = anchors
+		} else if !slices.EqualFunc(first, anchors, bytes.Equal) {
+			t.Errorf("Expected the same trust anchor order on every connection")
+		}
+	}
+}
+
+// trustAnchors decodes the identifiers in the trust_anchors (0xca34) extension.
+func trustAnchors(t *testing.T, data PeetsApiAllData) [][]byte {
+	for _, ext := range data.TLS.Extensions {
+		if !strings.Contains(ext.Name, "51764") {
+			continue
+		}
+		b, err := hex.DecodeString(ext.Data)
+		if err != nil || len(b) < 2 {
+			t.Fatalf("bad trust_anchors data %q", ext.Data)
+		}
+		b = b[2:]
+		var anchors [][]byte
+		for len(b) > 0 {
+			n := int(b[0])
+			if len(b) < 1+n {
+				t.Fatalf("truncated trust_anchors data %q", ext.Data)
+			}
+			anchors = append(anchors, b[1:1+n])
+			b = b[1+n:]
+		}
+		return anchors
+	}
+	return nil
 }
