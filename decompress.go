@@ -1,8 +1,9 @@
 package tlsclient
 
 import (
-	"bytes"
+	"bufio"
 	"io"
+	"strings"
 
 	"github.com/andybalholm/brotli"
 	"github.com/klauspost/compress/flate"
@@ -12,36 +13,15 @@ import (
 	"github.com/nukilabs/http"
 )
 
-const (
-	zlibMethodDeflate = 0x78
-	zlibLevelDefault  = 0x9C
-	zlibLevelLow      = 0x01
-	zlibLevelMedium   = 0x5E
-	zlibLevelBest     = 0xDA
-)
-
 func DecompressBody(res *http.Response) {
-	ce := res.Header.Get("Content-Encoding")
+	ce := strings.ToLower(strings.TrimSpace(res.Header.Get("Content-Encoding")))
 	switch ce {
 	case "gzip":
 		res.Body = &gzipReader{body: res.Body}
 	case "br":
 		res.Body = &brReader{body: res.Body}
 	case "deflate":
-		// read zlib header
-		var header [2]byte
-		if _, err := io.ReadFull(res.Body, header[:]); err != nil {
-			return
-		}
-		// reset body to include header
-		res.Body = io.NopCloser(io.MultiReader(bytes.NewReader(header[:]), res.Body))
-		// check for zlib header
-		if header[0] == zlibMethodDeflate && (header[1] == zlibLevelDefault || header[1] == zlibLevelLow || header[1] == zlibLevelMedium || header[1] == zlibLevelBest) {
-			res.Body = &zlibDeflateReader{body: res.Body}
-		} else if header[0] == zlibMethodDeflate {
-			res.Body = &deflateReader{body: res.Body}
-		}
-		return
+		res.Body = &deflateReader{body: res.Body}
 	case "zstd":
 		res.Body = &zstdReader{body: res.Body}
 	default:
@@ -101,34 +81,9 @@ func (br *brReader) Close() error {
 	return br.body.Close()
 }
 
-// zlibDeflateReader wraps a response body so it can lazily
-// call zlib.NewReader on the first call to Read
-type zlibDeflateReader struct {
-	body io.ReadCloser
-	r    io.ReadCloser
-	err  error
-}
-
-func (z *zlibDeflateReader) Read(p []byte) (n int, err error) {
-	if z.err != nil {
-		return 0, z.err
-	}
-	if z.r == nil {
-		z.r, err = zlib.NewReader(z.body)
-		if err != nil {
-			z.err = err
-			return 0, z.err
-		}
-	}
-	return z.r.Read(p)
-}
-
-func (z *zlibDeflateReader) Close() error {
-	return z.r.Close()
-}
-
-// deflateReader wraps a response body so it can lazily
-// call flate.NewReader on the first call to Read
+// deflateReader wraps a response body so it can lazily decide on the
+// first call to Read whether the body is zlib-wrapped (RFC 1950) or raw
+// deflate (RFC 1951). Servers send both for "Content-Encoding: deflate".
 type deflateReader struct {
 	body io.ReadCloser
 	r    io.ReadCloser
@@ -140,13 +95,38 @@ func (dr *deflateReader) Read(p []byte) (n int, err error) {
 		return 0, dr.err
 	}
 	if dr.r == nil {
-		dr.r = flate.NewReader(dr.body)
+		br := bufio.NewReader(dr.body)
+		header, err := br.Peek(2)
+		if len(header) == 0 {
+			// empty body
+			dr.err = err
+			return 0, err
+		}
+		if len(header) == 2 && isZlibHeader(header[0], header[1]) {
+			dr.r, err = zlib.NewReader(br)
+			if err != nil {
+				dr.err = err
+				return 0, err
+			}
+		} else {
+			dr.r = flate.NewReader(br)
+		}
 	}
 	return dr.r.Read(p)
 }
 
 func (dr *deflateReader) Close() error {
-	return dr.r.Close()
+	if dr.r != nil {
+		dr.r.Close()
+	}
+	return dr.body.Close()
+}
+
+// isZlibHeader reports whether cmf and flg form a valid zlib header:
+// compression method 8 (deflate), window size of at most 32K and a
+// correct FCHECK.
+func isZlibHeader(cmf, flg byte) bool {
+	return cmf&0x0f == 8 && cmf>>4 <= 7 && (uint16(cmf)<<8|uint16(flg))%31 == 0
 }
 
 // zstdReader wraps a response body so it can lazily
@@ -172,5 +152,8 @@ func (z *zstdReader) Read(p []byte) (n int, err error) {
 }
 
 func (z *zstdReader) Close() error {
+	if z.r != nil {
+		z.r.Close()
+	}
 	return z.body.Close()
 }
