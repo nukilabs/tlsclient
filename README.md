@@ -253,7 +253,7 @@ client.DeletePostHooks()
 
 Every request runs all of its hooks. Hooks of concurrent requests run in parallel, so hooks must be safe for concurrent use.
 
-Inside a hook, `hook.Do` sends a request without running hooks, including pre-hooks on its redirects. `hook.Client()` is the client itself, so `hook.Client().Do` is a normal request that runs hooks. Use it when a nested request needs them, and make sure the hook terminates:
+Inside a hook, `hook.Do` sends a request without running hooks. Its redirects still run pre-hooks, unless a pre-hook sent it, which stops a pre-hook from recursing through its own redirects. A clone runs its own pre-hooks on redirects, then those of the client it was cloned from. `hook.Client()` is the client itself, so `hook.Client().Do` is a normal request that runs hooks. Use it when a nested request needs them, and make sure the hook terminates:
 
 ```go
 func Refresh(hook *tlsclient.Hook, req *http.Request, res *http.Response) (*http.Response, error) {

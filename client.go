@@ -25,6 +25,7 @@ type Client struct {
 	pinner    *Pinner
 	tracker   bandwidth.Tracker
 	proxyVal  any
+	parent    *Client
 	hooksMu   sync.RWMutex
 	preHooks  []PreHook
 	postHooks []PostHook
@@ -50,6 +51,7 @@ type PostHook func(*Hook, *http.Request, *http.Response) (*http.Response, error)
 // make sure it terminates.
 type Hook struct {
 	client *Client
+	pre    bool
 }
 
 // Client returns the client the hook is running on.
@@ -57,8 +59,13 @@ func (h *Hook) Client() *Client {
 	return h.client
 }
 
-// Do sends req without running hooks, including pre-hooks on its redirects.
+// Do sends req without running hooks. Pre-hooks still run on its redirects,
+// unless the Hook belongs to a pre-hook: one running on a redirect would call
+// Do again and could recurse.
 func (h *Hook) Do(req *http.Request) (*http.Response, error) {
+	if !h.pre {
+		return h.client.send(req)
+	}
 	res, err := h.client.send(req.WithContext(withSkipRedirectHooks(req.Context())))
 	if err != nil {
 		return nil, err
@@ -111,6 +118,7 @@ func (c *Client) Clone() *Client {
 		profile:        c.profile,
 		pinner:         c.pinner,
 		tracker:        c.tracker,
+		parent:         c,
 		noFollow:       c.noFollow,
 		tlsConf:        c.tlsConf.Clone(),
 		quicConf:       c.quicConf.Clone(),
@@ -237,7 +245,8 @@ func (c *Client) CloseIdleConnections() {
 }
 
 // SetRedirectFunc sets the redirect policy. After f allows a redirect the
-// pre-hooks run for the new request, unless it continues a Hook.Do request.
+// pre-hooks run for the new request, then those of the client it was cloned
+// from, unless it continues a pre-hook's Hook.Do request.
 func (c *Client) SetRedirectFunc(f func(req *http.Request, via []*http.Request) error) {
 	g := func(req *http.Request, via []*http.Request) error {
 		err := f(req, via)
@@ -247,12 +256,14 @@ func (c *Client) SetRedirectFunc(f func(req *http.Request, via []*http.Request) 
 		if redirectHooksSkipped(req.Context()) {
 			return nil
 		}
-		h := &Hook{client: c}
-		preHooks, _ := c.hooks()
-		for _, hook := range preHooks {
-			req, err = hook(h, req)
-			if err != nil {
-				return err
+		for client := c; client != nil; client = client.parent {
+			h := &Hook{client: client, pre: true}
+			preHooks, _ := client.hooks()
+			for _, hook := range preHooks {
+				req, err = hook(h, req)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -275,7 +286,7 @@ func (c *Client) SetFollowRedirects(follow bool) {
 }
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
-	h := &Hook{client: c}
+	h := &Hook{client: c, pre: true}
 	preHooks, _ := c.hooks()
 	var err error
 	for _, hook := range preHooks {
@@ -288,6 +299,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
+	h = &Hook{client: c}
 	_, postHooks := c.hooks()
 	for _, hook := range postHooks {
 		res, err = hook(h, req, res)

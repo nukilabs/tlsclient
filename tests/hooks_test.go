@@ -245,7 +245,28 @@ func TestRedirectHooks(t *testing.T) {
 		}
 	})
 
-	t.Run("nested request skips pre-hooks on redirect", func(t *testing.T) {
+	t.Run("post-hook's nested request runs pre-hooks on redirect only", func(t *testing.T) {
+		c, count := newClient(t)
+		var nested atomic.Bool
+		c.SetPreHooks(func(_ *tlsclient.Hook, req *http.Request) (*http.Request, error) {
+			count.Add(1)
+			return req, nil
+		})
+		c.SetPostHooks(func(h *tlsclient.Hook, _ *http.Request, res *http.Response) (*http.Response, error) {
+			if nested.Swap(true) {
+				return res, nil
+			}
+			return res, get(h, srv.URL+"/redirect")
+		})
+		if err := get(c, srv.URL); err != nil {
+			t.Fatal(err)
+		}
+		if got := count.Load(); got != 2 {
+			t.Errorf("pre-hook ran %d times, want 2", got)
+		}
+	})
+
+	t.Run("pre-hook's nested request skips pre-hooks on redirect", func(t *testing.T) {
 		c, count := newClient(t)
 		c.SetPreHooks(func(h *tlsclient.Hook, req *http.Request) (*http.Request, error) {
 			if count.Add(1) > 1 {
@@ -286,14 +307,10 @@ func TestHookDoEndsWithTheRequest(t *testing.T) {
 	c := hookClient(t)
 	c.SetRedirectFunc(func(*http.Request, []*http.Request) error { return nil })
 
-	var pre, post atomic.Int32
-	c.SetPreHooks(func(_ *tlsclient.Hook, req *http.Request) (*http.Request, error) {
-		pre.Add(1)
-		return req, nil
-	})
-	c.SetPostHooks(func(h *tlsclient.Hook, _ *http.Request, res *http.Response) (*http.Response, error) {
-		if post.Add(1) > 1 {
-			return res, nil
+	var pre atomic.Int32
+	c.SetPreHooks(func(h *tlsclient.Hook, req *http.Request) (*http.Request, error) {
+		if pre.Add(1) > 1 {
+			return req, nil
 		}
 		nested, err := http.NewRequest(http.MethodGet, srv.URL+"/redirect", nil)
 		if err != nil {
@@ -312,7 +329,7 @@ func TestHookDoEndsWithTheRequest(t *testing.T) {
 			return nil, err
 		}
 		hooked.Body.Close()
-		return res, nil
+		return req, nil
 	})
 
 	if err := get(c, srv.URL); err != nil {
@@ -333,14 +350,10 @@ func TestHookDoLeavesNoMarkOnResponse(t *testing.T) {
 	c.Timeout = 0
 	c.SetRedirectFunc(func(*http.Request, []*http.Request) error { return nil })
 
-	var pre, post atomic.Int32
-	c.SetPreHooks(func(_ *tlsclient.Hook, req *http.Request) (*http.Request, error) {
-		pre.Add(1)
-		return req, nil
-	})
-	c.SetPostHooks(func(h *tlsclient.Hook, _ *http.Request, res *http.Response) (*http.Response, error) {
-		if post.Add(1) > 1 {
-			return res, nil
+	var pre atomic.Int32
+	c.SetPreHooks(func(h *tlsclient.Hook, req *http.Request) (*http.Request, error) {
+		if pre.Add(1) > 1 {
+			return req, nil
 		}
 		nested, err := http.NewRequest(http.MethodGet, srv.URL, nil)
 		if err != nil {
@@ -361,7 +374,7 @@ func TestHookDoLeavesNoMarkOnResponse(t *testing.T) {
 			return nil, err
 		}
 		hooked.Body.Close()
-		return res, nil
+		return req, nil
 	})
 
 	if err := get(c, srv.URL); err != nil {
@@ -404,8 +417,8 @@ func TestCloneRedirects(t *testing.T) {
 		if err := get(clone, srv.URL+"/redirect"); err != nil {
 			t.Fatal(err)
 		}
-		if got := original.Load(); got != 0 {
-			t.Errorf("original's pre-hook ran %d times, want 0", got)
+		if got := original.Load(); got != 1 {
+			t.Errorf("original's pre-hook ran %d times, want 1 for the redirect", got)
 		}
 		if got := hops.Load(); got != 2 {
 			t.Errorf("clone's pre-hook ran %d times, want 2", got)
