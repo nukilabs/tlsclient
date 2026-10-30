@@ -6,7 +6,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/nukilabs/http"
@@ -25,10 +25,12 @@ type Client struct {
 	pinner    *Pinner
 	tracker   bandwidth.Tracker
 	proxyVal  any
+	hooksMu   sync.RWMutex
 	preHooks  []PreHook
 	postHooks []PostHook
-	inHook    atomic.Bool
 	redirect  func(req *http.Request, via []*http.Request) error
+	policy    func(req *http.Request, via []*http.Request) error
+	noFollow  bool
 	tlsConf   *tls.Config
 	quicConf  *quic.Config
 	opts      *TransportOptions
@@ -36,8 +38,34 @@ type Client struct {
 	AutoDecompress bool
 }
 
-type PreHook func(*Client, *http.Request) (*http.Request, error)
-type PostHook func(*Client, *http.Request, *http.Response) (*http.Response, error)
+// PreHook runs before a request is sent and PostHook after a response is
+// received. Hooks of concurrent requests run in parallel, so a hook must be safe
+// for concurrent use.
+type PreHook func(*Hook, *http.Request) (*http.Request, error)
+type PostHook func(*Hook, *http.Request, *http.Response) (*http.Response, error)
+
+// Hook is what a running hook uses to reach its client. Hook.Do sends a request
+// without running hooks, which is what stops a hook from re-entering itself.
+// Client().Do is a normal request and runs hooks, so a hook that uses it has to
+// make sure it terminates.
+type Hook struct {
+	client *Client
+}
+
+// Client returns the client the hook is running on.
+func (h *Hook) Client() *Client {
+	return h.client
+}
+
+// Do sends req without running hooks, including pre-hooks on its redirects.
+func (h *Hook) Do(req *http.Request) (*http.Response, error) {
+	res, err := h.client.send(req.WithContext(withSkipRedirectHooks(req.Context())))
+	if err != nil {
+		return nil, err
+	}
+	res.Request = res.Request.WithContext(req.Context())
+	return res, nil
+}
 
 func New(profile profiles.ClientProfile, options ...Option) *Client {
 	jar, _ := cookiejar.New(&cookiejar.Options{
@@ -83,7 +111,7 @@ func (c *Client) Clone() *Client {
 		profile:        c.profile,
 		pinner:         c.pinner,
 		tracker:        c.tracker,
-		redirect:       c.redirect,
+		noFollow:       c.noFollow,
 		tlsConf:        c.tlsConf.Clone(),
 		quicConf:       c.quicConf.Clone(),
 		opts:           c.opts,
@@ -92,6 +120,10 @@ func (c *Client) Clone() *Client {
 
 	dialer := proxy.Direct(nil, clone.Timeout)
 	clone.Transport = NewRoundTripper(clone.profile, dialer, clone.pinner, clone.tracker, clone.tlsConf, clone.quicConf, clone.opts)
+	if c.policy != nil {
+		clone.SetRedirectFunc(c.policy)
+		clone.SetFollowRedirects(!c.noFollow)
+	}
 	return clone
 }
 
@@ -135,27 +167,45 @@ func (c *Client) SetProxy(v any) error {
 }
 
 func (c *Client) SetPreHooks(hooks ...PreHook) {
+	c.hooksMu.Lock()
+	defer c.hooksMu.Unlock()
 	c.preHooks = hooks
 }
 
 func (c *Client) AddPreHooks(hooks ...PreHook) {
+	c.hooksMu.Lock()
+	defer c.hooksMu.Unlock()
 	c.preHooks = append(c.preHooks, hooks...)
 }
 
 func (c *Client) DeletePreHooks() {
+	c.hooksMu.Lock()
+	defer c.hooksMu.Unlock()
 	c.preHooks = nil
 }
 
 func (c *Client) SetPostHooks(hooks ...PostHook) {
+	c.hooksMu.Lock()
+	defer c.hooksMu.Unlock()
 	c.postHooks = hooks
 }
 
 func (c *Client) AddPostHooks(hooks ...PostHook) {
+	c.hooksMu.Lock()
+	defer c.hooksMu.Unlock()
 	c.postHooks = append(c.postHooks, hooks...)
 }
 
 func (c *Client) DeletePostHooks() {
+	c.hooksMu.Lock()
+	defer c.hooksMu.Unlock()
 	c.postHooks = nil
+}
+
+func (c *Client) hooks() ([]PreHook, []PostHook) {
+	c.hooksMu.RLock()
+	defer c.hooksMu.RUnlock()
+	return c.preHooks, c.postHooks
 }
 
 func (c *Client) SetCookieJar(jar http.CookieJar) {
@@ -186,14 +236,21 @@ func (c *Client) CloseIdleConnections() {
 	c.Client.CloseIdleConnections()
 }
 
+// SetRedirectFunc sets the redirect policy. After f allows a redirect the
+// pre-hooks run for the new request, unless it continues a Hook.Do request.
 func (c *Client) SetRedirectFunc(f func(req *http.Request, via []*http.Request) error) {
 	g := func(req *http.Request, via []*http.Request) error {
 		err := f(req, via)
 		if err != nil {
 			return err
 		}
-		for _, hook := range c.preHooks {
-			req, err = hook(c, req)
+		if redirectHooksSkipped(req.Context()) {
+			return nil
+		}
+		h := &Hook{client: c}
+		preHooks, _ := c.hooks()
+		for _, hook := range preHooks {
+			req, err = hook(h, req)
 			if err != nil {
 				return err
 			}
@@ -202,9 +259,12 @@ func (c *Client) SetRedirectFunc(f func(req *http.Request, via []*http.Request) 
 	}
 	c.Client.CheckRedirect = g
 	c.redirect = g
+	c.policy = f
+	c.noFollow = false
 }
 
 func (c *Client) SetFollowRedirects(follow bool) {
+	c.noFollow = !follow
 	if follow && c.redirect != nil {
 		c.Client.CheckRedirect = c.redirect
 	} else if follow {
@@ -214,44 +274,37 @@ func (c *Client) SetFollowRedirects(follow bool) {
 	}
 }
 
-func (c *Client) SetInHook(b bool) {
-	c.inHook.Store(b)
-}
-
-func (c *Client) IsInHook() bool {
-	return c.inHook.Load()
-}
-
-func (c *Client) ResetInHook() {
-	c.inHook.Store(false)
-}
-
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	h := &Hook{client: c}
+	preHooks, _ := c.hooks()
 	var err error
-	for _, hook := range c.preHooks {
-		if c.inHook.CompareAndSwap(false, true) {
-			req, err = hook(c, req)
-			c.inHook.Store(false)
-			if err != nil {
-				return nil, err
-			}
+	for _, hook := range preHooks {
+		req, err = hook(h, req)
+		if err != nil {
+			return nil, err
 		}
 	}
+	res, err := c.send(req)
+	if err != nil {
+		return nil, err
+	}
+	_, postHooks := c.hooks()
+	for _, hook := range postHooks {
+		res, err = hook(h, req, res)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (c *Client) send(req *http.Request) (*http.Response, error) {
 	res, err := c.Client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	if c.AutoDecompress {
 		DecompressBody(res)
-	}
-	for _, hook := range c.postHooks {
-		if c.inHook.CompareAndSwap(false, true) {
-			res, err = hook(c, req, res)
-			c.inHook.Store(false)
-			if err != nil {
-				return nil, err
-			}
-		}
 	}
 	return res, nil
 }

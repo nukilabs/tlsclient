@@ -206,7 +206,7 @@ client.SetProxy(&url.URL{
 Pre-hooks run before each request and can modify the request before it is sent.
 
 ```go
-func AddAuthHeader(client *tlsclient.Client, req *http.Request) (*http.Request, error) {
+func AddAuthHeader(hook *tlsclient.Hook, req *http.Request) (*http.Request, error) {
     req.Header.Set("Authorization", "Bearer my-token")
     return req, nil
 }
@@ -219,10 +219,10 @@ client.AddPreHooks(AddAuthHeader)
 Post-hooks run after each request and can inspect or modify the response.
 
 ```go
-func GotBlockedHook(client *tlsclient.Client, req *http.Request, res *http.Response) (*http.Response, error) {
+func GotBlockedHook(hook *tlsclient.Hook, req *http.Request, res *http.Response) (*http.Response, error) {
     if res.StatusCode == http.StatusTooManyRequests {
         // Switch to a different proxy if blocked
-        client.SetProxy(&url.URL{
+        hook.Client().SetProxy(&url.URL{
             Scheme: "http",
             Host:   "localhost:8889",
         })
@@ -248,6 +248,27 @@ client.AddPostHooks(hook3)
 client.DeletePreHooks()
 client.DeletePostHooks()
 ```
+
+### Hooks and Concurrency
+
+Every request runs all of its hooks. Hooks of concurrent requests run in parallel, so hooks must be safe for concurrent use.
+
+Inside a hook, `hook.Do` sends a request without running hooks, including pre-hooks on its redirects. `hook.Client()` is the client itself, so `hook.Client().Do` is a normal request that runs hooks. Use it when a nested request needs them, and make sure the hook terminates:
+
+```go
+func Refresh(hook *tlsclient.Hook, req *http.Request, res *http.Response) (*http.Response, error) {
+    if res.StatusCode != http.StatusUnauthorized {
+        return res, nil
+    }
+    token, err := fetchToken(hook) // hook.Do: skips hooks
+    if err != nil {
+        return nil, err
+    }
+    return hook.Client().Do(retry(req, token)) // runs hooks
+}
+```
+
+A client captured from outside the hook behaves like `hook.Client()`.
 
 ## Best Practices
 
